@@ -21,6 +21,8 @@ type ServerConfig struct {
 	ChanSize       int
 	MaxClientCount int
 	Protocol       string // 协议类型: protobuf, json, xml
+	ServerID       int32  // 服务器ID
+	ServerName     string // 服务器名称
 }
 
 // LogConfig 日志配置
@@ -111,6 +113,8 @@ func LoadConfig(filePath string) (*Config, error) {
 	config.Server.ChanSize = cfg.Section("server").Key("chan_size").MustInt(1024)
 	config.Server.MaxClientCount = cfg.Section("server").Key("max_client_count").MustInt(10000)
 	config.Server.Protocol = cfg.Section("server").Key("protocol").MustString("protobuf")
+	config.Server.ServerID = int32(cfg.Section("server").Key("server_id").MustInt(1))
+	config.Server.ServerName = cfg.Section("server").Key("server_name").MustString("GameServer")
 
 	// 解析日志配置
 	config.Log.Level = cfg.Section("log").Key("level").MustString("info")
@@ -167,6 +171,8 @@ func createDefaultConfig(filePath string) error {
 	serverSection.Key("chan_size").SetValue("1024")
 	serverSection.Key("max_client_count").SetValue("10000")
 	serverSection.Key("protocol").SetValue("protobuf")
+	serverSection.Key("server_id").SetValue("1")
+	serverSection.Key("server_name").SetValue("GameServer")
 
 	// 日志配置
 	logSection := cfg.Section("log")

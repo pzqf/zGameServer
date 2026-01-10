@@ -64,6 +64,13 @@ func main() {
 		zap.String("log_path", cfg.Log.Path),
 	)
 
+	// 初始化表格配置加载器
+	zLog.Info("Initializing table loader...")
+	config.GlobalTableLoader = config.NewTableLoader()
+	if err := config.GlobalTableLoader.LoadAllTables(); err != nil {
+		zLog.Fatal("Failed to load configuration tables", zap.Error(err))
+	}
+
 	zLog.Info("Starting MMO Game Server...")
 
 	// 创建游戏服务器
