@@ -1,9 +1,13 @@
 package player
 
 import (
+	"sync/atomic"
+
 	"go.uber.org/zap"
 
+	"github.com/pzqf/zEngine/zEvent"
 	"github.com/pzqf/zEngine/zNet"
+	"github.com/pzqf/zGameServer/event"
 	"github.com/pzqf/zUtil/zTime"
 )
 
@@ -35,8 +39,8 @@ type Player struct {
 
 type BasicInfo struct {
 	Level      int
-	Exp        int64
-	Gold       int64
+	Exp        atomic.Int64
+	Gold       atomic.Int64
 	VipLevel   int
 	ServerId   int
 	CreateTime int64
@@ -51,8 +55,6 @@ func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession, logg
 		status:   PlayerStatusOnline,
 		basicInfo: &BasicInfo{
 			Level:      1,
-			Exp:        0,
-			Gold:       1000,
 			VipLevel:   0,
 			ServerId:   1,
 			CreateTime: zTime.Now().Time().UnixMilli(), // 设置为当前时间
@@ -63,6 +65,10 @@ func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession, logg
 		tasks:     NewTaskManager(playerId, logger),
 		skills:    NewSkillManager(playerId, logger),
 	}
+
+	// 初始化原子字段
+	player.basicInfo.Exp.Store(0)
+	player.basicInfo.Gold.Store(1000)
 
 	// 初始化玩家系统组件
 	player.inventory.Init()
@@ -147,4 +153,65 @@ func (p *Player) SendPacket(protoId int32, data []byte) error {
 		return nil
 	}
 	return p.Session.Send(protoId, data)
+}
+
+// publishEvent 发布玩家相关事件
+func (p *Player) publishEvent(eventType zEvent.EventType, data interface{}) {
+	eventObj := event.NewEvent(eventType, p, data)
+	// 直接调用event包的GetGlobalEventBus函数获取全局事件总线实例
+	event.GetGlobalEventBus().Publish(eventObj)
+}
+
+// AddExp 增加玩家经验并发布事件
+func (p *Player) AddExp(exp int64) {
+	p.basicInfo.Exp.Add(exp)
+
+	// 发布经验增加事件
+	eventData := &event.PlayerExpEventData{
+		PlayerID: p.playerId,
+		Exp:      exp,
+	}
+	p.publishEvent(event.EventPlayerExpAdd, eventData)
+
+	// 检查是否升级
+	// TODO: 实现升级逻辑
+	// if newLevel > oldLevel {
+	// 	levelUpData := &event.PlayerLevelUpEventData{
+	// 		PlayerID: p.playerId,
+	// 		OldLevel: oldLevel,
+	// 		NewLevel: newLevel,
+	// 	}
+	// 	p.publishEvent(event.EventPlayerLevelUp, levelUpData)
+	// }
+}
+
+// AddGold 增加玩家金币并发布事件
+func (p *Player) AddGold(gold int64) {
+	p.basicInfo.Gold.Add(gold)
+
+	// 发布金币增加事件
+	eventData := &event.PlayerGoldEventData{
+		PlayerID: p.playerId,
+		Gold:     gold,
+	}
+	p.publishEvent(event.EventPlayerGoldAdd, eventData)
+}
+
+// SubGold 减少玩家金币并发布事件
+func (p *Player) SubGold(gold int64) bool {
+	for {
+		currentGold := p.basicInfo.Gold.Load()
+		if currentGold < gold {
+			return false // 金币不足
+		}
+		if p.basicInfo.Gold.CompareAndSwap(currentGold, currentGold-gold) {
+			// 发布金币减少事件
+			eventData := &event.PlayerGoldEventData{
+				PlayerID: p.playerId,
+				Gold:     -gold,
+			}
+			p.publishEvent(event.EventPlayerGoldSub, eventData)
+			return true
+		}
+	}
 }

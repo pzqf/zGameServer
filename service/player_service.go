@@ -45,7 +45,7 @@ func (ps *PlayerService) Close() error {
 			zap.Int64("playerId", playerId),
 			zap.String("name", player.GetName()),
 			zap.Int("level", player.GetBasicInfo().Level),
-			zap.Int64("gold", player.GetBasicInfo().Gold))
+			zap.Int64("gold", player.GetBasicInfo().Gold.Load()))
 		playerCount++
 		return true
 	})

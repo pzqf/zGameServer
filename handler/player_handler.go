@@ -74,8 +74,8 @@ func (h *playerHandler) handlePlayerGetInfo(session *zNet.TcpServerSession, pack
 		PlayerId:   player.GetPlayerId(),
 		Name:       player.GetName(),
 		Level:      int32(player.GetBasicInfo().Level),
-		Exp:        player.GetBasicInfo().Exp,
-		Gold:       player.GetBasicInfo().Gold,
+		Exp:        player.GetBasicInfo().Exp.Load(),
+		Gold:       player.GetBasicInfo().Gold.Load(),
 		VipLevel:   int32(player.GetBasicInfo().VipLevel),
 		ServerId:   1,
 		CreateTime: player.GetBasicInfo().CreateTime,
@@ -491,7 +491,7 @@ func (h *playerHandler) handleCharacterLogin(session *zNet.TcpServerSession, pac
 			PlayerId: player.GetPlayerId(),
 			Name:     player.GetName(),
 			Level:    int32(player.GetBasicInfo().Level),
-			Gold:     player.GetBasicInfo().Gold,
+			Gold:     player.GetBasicInfo().Gold.Load(),
 		}
 		respData, _ := proto.Marshal(&resp)
 		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGIN), respData)

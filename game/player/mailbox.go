@@ -1,8 +1,11 @@
 package player
 
 import (
+	"sync"
+
 	"go.uber.org/zap"
 
+	"github.com/pzqf/zGameServer/event"
 	"github.com/pzqf/zUtil/zMap"
 )
 
@@ -33,6 +36,7 @@ type Mailbox struct {
 	logger   *zap.Logger
 	mails    *zMap.Map // key: int64(mailId), value: *Mail
 	maxCount int
+	mu       sync.RWMutex // 用于保护邮箱操作的互斥锁
 }
 
 func NewMailbox(playerId int64, logger *zap.Logger) *Mailbox {
@@ -51,6 +55,9 @@ func (mb *Mailbox) Init() {
 
 // SendMail 发送邮件
 func (mb *Mailbox) SendMail(mail *Mail) error {
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+
 	// 检查邮箱是否已满
 	if mb.mails.Len() >= int64(mb.maxCount) {
 		// 删除最早的已读邮件
@@ -75,11 +82,22 @@ func (mb *Mailbox) SendMail(mail *Mail) error {
 	// 添加邮件
 	mb.mails.Store(mail.mailId, mail)
 	mb.logger.Info("Mail sent", zap.Int64("mailId", mail.mailId), zap.Int64("senderId", mail.senderId), zap.Int64("receiverId", mail.receiverId))
+
+	// 发布邮件接收事件
+	eventData := &event.PlayerMailEventData{
+		PlayerID: mb.playerId,
+		MailID:   mail.mailId,
+	}
+	event.GetGlobalEventBus().Publish(event.NewEvent(event.EventPlayerMailReceived, mb, eventData))
+
 	return nil
 }
 
 // GetMail 获取邮件
 func (mb *Mailbox) GetMail(mailId int64) (*Mail, bool) {
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+
 	mail, exists := mb.mails.Get(mailId)
 	if !exists {
 		return nil, false
@@ -97,6 +115,9 @@ func (mb *Mailbox) GetMail(mailId int64) (*Mail, bool) {
 
 // GetAllMails 获取所有邮件
 func (mb *Mailbox) GetAllMails() []*Mail {
+	mb.mu.RLock()
+	defer mb.mu.RUnlock()
+
 	var mails []*Mail
 	mb.mails.Range(func(key, value interface{}) bool {
 		if value != nil {
@@ -109,6 +130,9 @@ func (mb *Mailbox) GetAllMails() []*Mail {
 
 // GetUnreadMails 获取未读邮件
 func (mb *Mailbox) GetUnreadMails() []*Mail {
+	mb.mu.RLock()
+	defer mb.mu.RUnlock()
+
 	var mails []*Mail
 	mb.mails.Range(func(key, value interface{}) bool {
 		if value != nil {
@@ -124,6 +148,9 @@ func (mb *Mailbox) GetUnreadMails() []*Mail {
 
 // DeleteMail 删除邮件
 func (mb *Mailbox) DeleteMail(mailId int64) error {
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+
 	_, exists := mb.mails.Get(mailId)
 	if !exists {
 		return nil // 邮件不存在
@@ -137,6 +164,9 @@ func (mb *Mailbox) DeleteMail(mailId int64) error {
 
 // ClaimAttachments 领取邮件附件
 func (mb *Mailbox) ClaimAttachments(mailId int64) (*zMap.Map, error) {
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+
 	mail, exists := mb.mails.Get(mailId)
 	if !exists {
 		return nil, nil // 邮件不存在
@@ -155,5 +185,13 @@ func (mb *Mailbox) ClaimAttachments(mailId int64) (*zMap.Map, error) {
 	mb.mails.Store(mailId, m)
 
 	mb.logger.Info("Claimed mail attachments", zap.Int64("mailId", mailId), zap.Int64("playerId", mb.playerId))
+
+	// 发布邮件附件领取事件
+	eventData := &event.PlayerMailEventData{
+		PlayerID: mb.playerId,
+		MailID:   mailId,
+	}
+	event.GetGlobalEventBus().Publish(event.NewEvent(event.EventPlayerMailClaimed, mb, eventData))
+
 	return attachments, nil
 }
