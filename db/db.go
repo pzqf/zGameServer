@@ -8,7 +8,7 @@ import (
 
 // DBManager 数据库管理器
 type DBManager struct {
-	connectors   map[string]*connector.DBConnector
+	connectors   map[string]connector.DBConnector
 	CharacterDAO *dao.CharacterDAO
 	AccountDAO   *dao.AccountDAO
 	LoginLogDAO  *dao.LoginLogDAO
@@ -17,7 +17,7 @@ type DBManager struct {
 // NewDBManager 创建数据库管理器实例
 func NewDBManager() *DBManager {
 	return &DBManager{
-		connectors: make(map[string]*connector.DBConnector),
+		connectors: make(map[string]connector.DBConnector),
 	}
 }
 
@@ -27,17 +27,17 @@ func (manager *DBManager) Init() error {
 	dbConfigs := config.GetAllDBConfigs()
 
 	// 初始化所有数据库连接器
-	for dbName := range dbConfigs {
+	for dbName, dbConfig := range dbConfigs {
 		// 创建数据库连接器
-		conn := connector.NewDBConnector(dbName, 1000)
+		conn := connector.NewDBConnector(dbName, dbConfig.Driver, 1000)
 
 		// 初始化数据库连接
-		if err := conn.Init(); err != nil {
-			return err
-		}
+		conn.Init(dbConfig)
 
 		// 启动数据库连接器
-		conn.Start()
+		if err := conn.Start(); err != nil {
+			return err
+		}
 
 		// 存储连接器
 		manager.connectors[dbName] = conn
@@ -73,11 +73,11 @@ func (manager *DBManager) Close() error {
 }
 
 // GetConnector 获取指定名称的数据库连接器
-func (manager *DBManager) GetConnector(dbName string) *connector.DBConnector {
+func (manager *DBManager) GetConnector(dbName string) connector.DBConnector {
 	return manager.connectors[dbName]
 }
 
 // GetAllConnectors 获取所有数据库连接器
-func (manager *DBManager) GetAllConnectors() map[string]*connector.DBConnector {
+func (manager *DBManager) GetAllConnectors() map[string]connector.DBConnector {
 	return manager.connectors
 }

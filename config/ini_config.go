@@ -44,6 +44,7 @@ type DBConfig struct {
 	Charset  string
 	MaxIdle  int
 	MaxOpen  int
+	Driver   string // 数据库驱动类型: mysql, mongo
 }
 
 // GlobalConfig 全局配置实例
@@ -138,22 +139,24 @@ func LoadConfig(filePath string) (*Config, error) {
 				Charset:  section.Key("charset").MustString("utf8mb4"),
 				MaxIdle:  section.Key("max_idle").MustInt(10),
 				MaxOpen:  section.Key("max_open").MustInt(100),
+				Driver:   section.Key("driver").MustString("mysql"),
 			}
 			config.Databases[dbName] = dbCfg
 		}
 	}
 
-	// 如果没有配置数据库，添加默认的game数据库配置
+	// 如果没有配置数据库，添加默认的MongoDB配置
 	if len(config.Databases) == 0 {
 		config.Databases["game"] = DBConfig{
 			Host:     "localhost",
-			Port:     3306,
-			User:     "root",
+			Port:     27017,
+			User:     "",
 			Password: "",
 			DBName:   "game",
-			Charset:  "utf8mb4",
+			Charset:  "",
 			MaxIdle:  10,
 			MaxOpen:  100,
+			Driver:   "mongo",
 		}
 	}
 
@@ -182,38 +185,41 @@ func createDefaultConfig(filePath string) error {
 	logSection.Key("max_size").SetValue("100")
 	logSection.Key("max_age").SetValue("30")
 
-	// 游戏数据库配置
+	// 游戏数据库配置（MongoDB）
 	gameDBSection := cfg.Section("database.game")
 	gameDBSection.Key("host").SetValue("192.168.91.128")
-	gameDBSection.Key("port").SetValue("3306")
-	gameDBSection.Key("user").SetValue("root")
-	gameDBSection.Key("password").SetValue("potato")
+	gameDBSection.Key("port").SetValue("27017")
+	gameDBSection.Key("user").SetValue("")
+	gameDBSection.Key("password").SetValue("")
 	gameDBSection.Key("dbname").SetValue("game")
-	gameDBSection.Key("charset").SetValue("utf8mb4")
+	gameDBSection.Key("charset").SetValue("")
 	gameDBSection.Key("max_idle").SetValue("10")
 	gameDBSection.Key("max_open").SetValue("100")
+	gameDBSection.Key("driver").SetValue("mongo")
 
-	// 账号数据库配置
+	// 账号数据库配置（MongoDB）
 	accountDBSection := cfg.Section("database.account")
 	accountDBSection.Key("host").SetValue("192.168.91.128")
-	accountDBSection.Key("port").SetValue("3306")
-	accountDBSection.Key("user").SetValue("root")
-	accountDBSection.Key("password").SetValue("potato")
+	accountDBSection.Key("port").SetValue("27017")
+	accountDBSection.Key("user").SetValue("")
+	accountDBSection.Key("password").SetValue("")
 	accountDBSection.Key("dbname").SetValue("account")
-	accountDBSection.Key("charset").SetValue("utf8mb4")
+	accountDBSection.Key("charset").SetValue("")
 	accountDBSection.Key("max_idle").SetValue("10")
 	accountDBSection.Key("max_open").SetValue("100")
+	accountDBSection.Key("driver").SetValue("mongo")
 
-	// 日志数据库配置
+	// 日志数据库配置（MongoDB）
 	logDBSection := cfg.Section("database.log")
 	logDBSection.Key("host").SetValue("192.168.91.128")
-	logDBSection.Key("port").SetValue("3306")
-	logDBSection.Key("user").SetValue("root")
-	logDBSection.Key("password").SetValue("potato")
+	logDBSection.Key("port").SetValue("27017")
+	logDBSection.Key("user").SetValue("")
+	logDBSection.Key("password").SetValue("")
 	logDBSection.Key("dbname").SetValue("log")
-	logDBSection.Key("charset").SetValue("utf8mb4")
+	logDBSection.Key("charset").SetValue("")
 	logDBSection.Key("max_idle").SetValue("10")
 	logDBSection.Key("max_open").SetValue("100")
+	logDBSection.Key("driver").SetValue("mongo")
 
 	// 保存配置文件
 	if err := cfg.SaveTo(filePath); err != nil {
