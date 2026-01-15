@@ -1,6 +1,8 @@
 package event
 
-import "github.com/pzqf/zEngine/zEvent"
+import (
+	"github.com/pzqf/zEngine/zEvent"
+)
 
 // 游戏业务相关的事件类型定义
 const (
@@ -60,3 +62,5 @@ func NewEvent(eventType zEvent.EventType, source interface{}, data interface{}) 
 func GetGlobalEventBus() *zEvent.EventBus {
 	return zEvent.GetGlobalEventBus()
 }
+
+// 全局Actor系统通过zEngine获取
