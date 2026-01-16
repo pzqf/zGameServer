@@ -1,4 +1,4 @@
-package config
+package tables
 
 import (
 	"fmt"
@@ -8,11 +8,6 @@ import (
 	"github.com/xuri/excelize/v2"
 	"go.uber.org/zap"
 )
-
-// ExcelReader Excel读取器
-func ExcelReader() {
-	// 这个函数作为excel_reader.go的入口点
-}
 
 // ExcelConfig Excel表格配置
 type ExcelConfig struct {
@@ -26,7 +21,7 @@ type ExcelConfig struct {
 func ReadExcelFile(config ExcelConfig, dir string, rowProcessor func([]string) error) error {
 	// 构建文件路径
 	filePath := filepath.Join(dir, config.FileName)
-	
+
 	// 打开Excel文件
 	f, err := excelize.OpenFile(filePath)
 	if err != nil {
@@ -44,20 +39,20 @@ func ReadExcelFile(config ExcelConfig, dir string, rowProcessor func([]string) e
 	successCount := 0
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
-		
+
 		// 检查是否有足够的列
 		if len(row) < config.MinColumns {
-			zap.L().Warn(fmt.Sprintf("%s row %d has insufficient columns (expected: %d, actual: %d)", 
+			zap.L().Warn(fmt.Sprintf("%s row %d has insufficient columns (expected: %d, actual: %d)",
 				config.FileName, i+1, config.MinColumns, len(row)))
 			continue
 		}
-		
+
 		// 调用行处理器
 		if err := rowProcessor(row); err != nil {
 			zap.L().Error(fmt.Sprintf("%s row %d processing error: %v", config.FileName, i+1, err))
 			continue
 		}
-		
+
 		successCount++
 	}
 
@@ -65,20 +60,47 @@ func ReadExcelFile(config ExcelConfig, dir string, rowProcessor func([]string) e
 	return nil
 }
 
-// StrToInt32 将字符串转换为int32
+// StrToInt32 将字符串转换为int32（无错误处理，向后兼容）
 func StrToInt32(s string) int32 {
-	v, err := strconv.ParseInt(s, 10, 32)
-	if err != nil {
-		return 0
-	}
-	return int32(v)
+	v, _ := StrToInt32WithError(s)
+	return v
 }
 
-// StrToFloat32 将字符串转换为float32
+// StrToInt32WithError 将字符串转换为int32（带错误处理）
+func StrToInt32WithError(s string) (int32, error) {
+	v, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert string '%s' to int32: %w", s, err)
+	}
+	return int32(v), nil
+}
+
+// StrToInt64 将字符串转换为int64（无错误处理，向后兼容）
+func StrToInt64(s string) int64 {
+	v, _ := StrToInt64WithError(s)
+	return v
+}
+
+// StrToInt64WithError 将字符串转换为int64（带错误处理）
+func StrToInt64WithError(s string) (int64, error) {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert string '%s' to int64: %w", s, err)
+	}
+	return v, nil
+}
+
+// StrToFloat32 将字符串转换为float32（无错误处理，向后兼容）
 func StrToFloat32(s string) float32 {
+	v, _ := StrToFloat32WithError(s)
+	return v
+}
+
+// StrToFloat32WithError 将字符串转换为float32（带错误处理）
+func StrToFloat32WithError(s string) (float32, error) {
 	v, err := strconv.ParseFloat(s, 32)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("failed to convert string '%s' to float32: %w", s, err)
 	}
-	return float32(v)
+	return float32(v), nil
 }

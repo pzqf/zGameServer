@@ -8,6 +8,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/config"
+	"github.com/pzqf/zGameServer/config/tables"
 	"github.com/pzqf/zGameServer/db"
 	"github.com/pzqf/zGameServer/gameserver"
 	"github.com/pzqf/zGameServer/handler"
@@ -66,8 +67,7 @@ func main() {
 
 	// 初始化表格配置加载器
 	zLog.Info("Initializing table loader...")
-	config.GlobalTableLoader = config.NewTableLoader()
-	if err := config.GlobalTableLoader.LoadAllTables(); err != nil {
+	if err := tables.GlobalTableManager.LoadAllTables(); err != nil {
 		zLog.Fatal("Failed to load configuration tables", zap.Error(err))
 	}
 

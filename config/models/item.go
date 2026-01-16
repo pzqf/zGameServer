@@ -1,7 +1,7 @@
 package models
 
-// Item 物品配置结构
-type Item struct {
+// ItemBase 物品配置结构
+type ItemBase struct {
 	ItemID      int32  `json:"item_id"`
 	Name        string `json:"name"`
 	Type        int32  `json:"type"`
