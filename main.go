@@ -50,7 +50,7 @@ func main() {
 	}
 
 	// 初始化日志系统
-	if err := zLog.InitLogger(cfg.Log.ToZLogConfig()); err != nil {
+	if err := zLog.InitLogger(cfg.Log.ToLogConfig()); err != nil {
 		// 如果日志初始化失败，使用默认日志
 		zLog.Fatal("Failed to initialize logger", zap.Error(err))
 	}
@@ -67,6 +67,8 @@ func main() {
 
 	// 初始化表格配置加载器
 	zLog.Info("Initializing table loader...")
+	// 初始化全局表格管理器
+	tables.GlobalTableManager = tables.NewTableManager()
 	if err := tables.GlobalTableManager.LoadAllTables(); err != nil {
 		zLog.Fatal("Failed to load configuration tables", zap.Error(err))
 	}

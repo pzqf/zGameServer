@@ -22,8 +22,8 @@ func NewPlayerLevelTableLoader() *PlayerLevelTableLoader {
 // Load 加载人物等级表数据
 func (plt *PlayerLevelTableLoader) Load(dir string) error {
 	config := ExcelConfig{
-		FileName:   "playerlevel.xlsx",
-		SheetName:  "Sheet1",
+		FileName:   "player_level.xlsx",
+		SheetName:  "level",
 		MinColumns: 8,
 		TableName:  "playerLevels",
 	}

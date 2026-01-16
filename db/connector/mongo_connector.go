@@ -109,7 +109,7 @@ func (c *MongoConnector) Query(sql string, args []interface{}, callback func(*sq
 	// MongoDB不直接支持SQL查询，这里需要将SQL查询转换为MongoDB查询
 	// 这是一个简化实现，实际应用中需要更复杂的SQL到MongoDB查询转换
 	c.logger.Warn("SQL to MongoDB query conversion not fully implemented", zap.String("sql", sql))
-	
+
 	if callback != nil {
 		callback(nil, fmt.Errorf("SQL query not supported in MongoDB"))
 	}
@@ -128,7 +128,7 @@ func (c *MongoConnector) Execute(sql string, args []interface{}, callback func(s
 	// MongoDB不直接支持SQL执行，这里需要将SQL执行转换为MongoDB操作
 	// 这是一个简化实现，实际应用中需要更复杂的SQL到MongoDB操作转换
 	c.logger.Warn("SQL to MongoDB execute conversion not fully implemented", zap.String("sql", sql))
-	
+
 	if callback != nil {
 		callback(nil, fmt.Errorf("SQL execute not supported in MongoDB"))
 	}
