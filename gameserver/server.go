@@ -5,9 +5,9 @@ import (
 
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/config"
-	"github.com/pzqf/zGameServer/protolayer"
-	"github.com/pzqf/zGameServer/router"
-	"github.com/pzqf/zGameServer/service"
+	"github.com/pzqf/zGameServer/net/protolayer"
+	"github.com/pzqf/zGameServer/net/router"
+	"github.com/pzqf/zGameServer/net/service"
 	"go.uber.org/zap"
 )
 
@@ -52,6 +52,12 @@ func NewGameServerWithConfig(logger *zap.Logger, serverCfg *config.ServerConfig)
 	tcpService := service.NewTcpService(gs.packetRouter)
 	if err := gs.AddService(tcpService); err != nil {
 		logger.Fatal("Failed to add TCP service", zap.Error(err))
+	}
+
+	// 创建并注册HTTP服务
+	httpService := service.NewHTTPService()
+	if err := gs.AddService(httpService); err != nil {
+		logger.Fatal("Failed to add HTTP service", zap.Error(err))
 	}
 
 	return gs

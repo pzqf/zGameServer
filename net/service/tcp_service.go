@@ -5,7 +5,7 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zObject"
 	"github.com/pzqf/zGameServer/config"
-	"github.com/pzqf/zGameServer/router"
+	"github.com/pzqf/zGameServer/net/router"
 	"go.uber.org/zap"
 )
 

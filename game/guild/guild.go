@@ -1,4 +1,4 @@
-package global
+package guild
 
 import (
 	"errors"
@@ -39,42 +39,42 @@ const (
 
 // GuildMember 公会成员
 type GuildMember struct {
-	playerId     int64
-	name         string
-	position     int
-	contribution int64
-	joinTime     int64
-	online       bool
-	lastOnline   int64
+	PlayerId     int64
+	Name         string
+	Position     int
+	Contribution int64
+	JoinTime     int64
+	Online       bool
+	LastOnline   int64
 }
 
 // GuildApply 公会申请
 type GuildApply struct {
-	applyId    int64
-	playerId   int64
-	playerName string
-	guildId    int64
-	applyTime  int64
-	status     int
-	remark     string
+	ApplyId    int64
+	PlayerId   int64
+	PlayerName string
+	GuildId    int64
+	ApplyTime  int64
+	Status     int
+	Remark     string
 }
 
 // Guild 公会结构
 type Guild struct {
-	guildId          int64
-	name             string
-	level            int
-	exp              int64
-	leaderId         int64
-	memberCount      int
-	maxMembers       int
-	members          *zMap.Map // key: int64(playerId), value: *GuildMember
-	applies          *zMap.Map // key: int64(applyId), value: *GuildApply
-	createTime       int64
-	notice           string
-	warScore         int64         // 公会战积分
-	territories      []int         // 占领的领地
-	permissionConfig map[int]int64 // key: position, value: permission mask
+	GuildId          int64
+	Name             string
+	Level            int
+	Exp              int64
+	LeaderId         int64
+	MemberCount      int
+	MaxMembers       int
+	Members          *zMap.Map // key: int64(playerId), value: *GuildMember
+	Applies          *zMap.Map // key: int64(applyId), value: *GuildApply
+	CreateTime       int64
+	Notice           string
+	WarScore         int64         // 公会战积分
+	Territories      []int         // 占领的领地
+	PermissionConfig map[int]int64 // key: position, value: permission mask
 }
 
 // GuildService 公会服务
@@ -160,33 +160,33 @@ func (gs *GuildService) CreateGuild(guildId int64, guildName string, leaderId in
 
 	// 创建新公会
 	guild := &Guild{
-		guildId:          guildId,
-		name:             guildName,
-		level:            1,
-		exp:              0,
-		leaderId:         leaderId,
-		memberCount:      1,
-		maxMembers:       20,
-		members:          zMap.NewMap(),
-		applies:          zMap.NewMap(),
-		createTime:       currentTime,
-		notice:           "欢迎加入公会！",
-		warScore:         0,
-		territories:      []int{},
-		permissionConfig: permissionConfig,
+		GuildId:          guildId,
+		Name:             guildName,
+		Level:            1,
+		Exp:              0,
+		LeaderId:         leaderId,
+		MemberCount:      1,
+		MaxMembers:       20,
+		Members:          zMap.NewMap(),
+		Applies:          zMap.NewMap(),
+		CreateTime:       currentTime,
+		Notice:           "欢迎加入公会！",
+		WarScore:         0,
+		Territories:      []int{},
+		PermissionConfig: permissionConfig,
 	}
 
 	// 添加会长到公会成员
 	guildMember := &GuildMember{
-		playerId:     leaderId,
-		name:         leaderName,
-		position:     GuildPositionLeader,
-		contribution: 0,
-		joinTime:     currentTime,
-		online:       true,
-		lastOnline:   currentTime,
+		PlayerId:     leaderId,
+		Name:         leaderName,
+		Position:     GuildPositionLeader,
+		Contribution: 0,
+		JoinTime:     currentTime,
+		Online:       true,
+		LastOnline:   currentTime,
 	}
-	guild.members.Store(leaderId, guildMember)
+	guild.Members.Store(leaderId, guildMember)
 
 	// 存储公会信息
 	gs.guilds.Store(guildId, guild)
@@ -212,7 +212,7 @@ func (gs *GuildService) JoinGuild(playerId int64, playerName string, guildId int
 	}
 
 	// 检查公会是否已满
-	if guild.memberCount >= guild.maxMembers {
+	if guild.MemberCount >= guild.MaxMembers {
 		return nil // 公会已满
 	}
 
@@ -221,16 +221,16 @@ func (gs *GuildService) JoinGuild(playerId int64, playerName string, guildId int
 
 	// 添加玩家到公会成员
 	guildMember := &GuildMember{
-		playerId:     playerId,
-		name:         playerName,
-		position:     GuildPositionMember,
-		contribution: 0,
-		joinTime:     currentTime,
-		online:       true,
-		lastOnline:   currentTime,
+		PlayerId:     playerId,
+		Name:         playerName,
+		Position:     GuildPositionMember,
+		Contribution: 0,
+		JoinTime:     currentTime,
+		Online:       true,
+		LastOnline:   currentTime,
 	}
-	guild.members.Store(playerId, guildMember)
-	guild.memberCount++
+	guild.Members.Store(playerId, guildMember)
+	guild.MemberCount++
 
 	// 存储玩家公会关系
 	gs.playerGuild.Store(playerId, guildId)
@@ -256,24 +256,24 @@ func (gs *GuildService) LeaveGuild(playerId int64) error {
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.members.Get(playerId)
+	memberInterface, exists := guild.Members.Get(playerId)
 	if !exists {
 		return nil // 玩家不在公会中
 	}
 	member := memberInterface.(*GuildMember)
 
 	// 如果是会长，需要处理会长转让
-	if member.position == GuildPositionLeader {
+	if member.Position == GuildPositionLeader {
 		// 转让会长职位
 		gs.transferGuildLeader(guild, playerId)
 	}
 
 	// 从公会成员中移除
-	guild.members.Delete(playerId)
-	guild.memberCount--
+	guild.Members.Delete(playerId)
+	guild.MemberCount--
 
 	// 如果公会成员为0，解散公会
-	if guild.memberCount <= 0 {
+	if guild.MemberCount <= 0 {
 		gs.DisbandGuild(guildId)
 		return nil
 	}
@@ -295,19 +295,19 @@ func (gs *GuildService) DisbandGuild(guildId int64) error {
 	guild := guildInterface.(*Guild)
 
 	// 移除所有成员的公会关系
-	guild.members.Range(func(key, value interface{}) bool {
+	guild.Members.Range(func(key, value interface{}) bool {
 		playerId := key.(int64)
 		gs.playerGuild.Delete(playerId)
 		return true
 	})
 
 	// 移除公会名称映射
-	gs.guildNameMap.Delete(guild.name)
+	gs.guildNameMap.Delete(guild.Name)
 
 	// 从公会列表中移除
 	gs.guilds.Delete(guildId)
 
-	gs.logger.Info("Guild disbanded", zap.Int64("guildId", guildId), zap.String("guildName", guild.name))
+	gs.logger.Info("Guild disbanded", zap.Int64("guildId", guildId), zap.String("guildName", guild.Name))
 	return nil
 }
 
@@ -347,13 +347,13 @@ func (gs *GuildService) ApplyGuild(applyId int64, playerId int64, playerName str
 
 	// 创建公会申请
 	apply := &GuildApply{
-		applyId:    applyId,
-		playerId:   playerId,
-		playerName: playerName,
-		guildId:    guildId,
-		applyTime:  currentTime,
-		status:     GuildApplyStatusPending,
-		remark:     remark,
+		ApplyId:    applyId,
+		PlayerId:   playerId,
+		PlayerName: playerName,
+		GuildId:    guildId,
+		ApplyTime:  currentTime,
+		Status:     GuildApplyStatusPending,
+		Remark:     remark,
 	}
 
 	// 获取公会
@@ -361,7 +361,7 @@ func (gs *GuildService) ApplyGuild(applyId int64, playerId int64, playerName str
 	guild := guildInterface.(*Guild)
 
 	// 存储申请
-	guild.applies.Store(applyId, apply)
+	guild.Applies.Store(applyId, apply)
 
 	gs.logger.Info("Guild application submitted", zap.Int64("applyId", applyId), zap.Int64("playerId", playerId), zap.Int64("guildId", guildId))
 	return nil
@@ -374,11 +374,11 @@ func (gs *GuildService) transferGuildLeader(guild *Guild, oldLeaderId int64) {
 	var newLeaderId int64
 
 	// 先找副会长
-	guild.members.Range(func(key, value interface{}) bool {
+	guild.Members.Range(func(key, value interface{}) bool {
 		member := value.(*GuildMember)
-		if member.position == GuildPositionVice {
+		if member.Position == GuildPositionVice {
 			newLeader = member
-			newLeaderId = member.playerId
+			newLeaderId = member.PlayerId
 			return false
 		}
 		return true
@@ -386,11 +386,11 @@ func (gs *GuildService) transferGuildLeader(guild *Guild, oldLeaderId int64) {
 
 	// 如果没有副会长，找精英成员
 	if newLeader == nil {
-		guild.members.Range(func(key, value interface{}) bool {
+		guild.Members.Range(func(key, value interface{}) bool {
 			member := value.(*GuildMember)
-			if member.position == GuildPositionElite {
+			if member.Position == GuildPositionElite {
 				newLeader = member
-				newLeaderId = member.playerId
+				newLeaderId = member.PlayerId
 				return false
 			}
 			return true
@@ -399,11 +399,11 @@ func (gs *GuildService) transferGuildLeader(guild *Guild, oldLeaderId int64) {
 
 	// 如果没有精英成员，找普通成员
 	if newLeader == nil {
-		guild.members.Range(func(key, value interface{}) bool {
+		guild.Members.Range(func(key, value interface{}) bool {
 			member := value.(*GuildMember)
-			if member.playerId != oldLeaderId {
+			if member.PlayerId != oldLeaderId {
 				newLeader = member
-				newLeaderId = member.playerId
+				newLeaderId = member.PlayerId
 				return false
 			}
 			return true
@@ -413,18 +413,18 @@ func (gs *GuildService) transferGuildLeader(guild *Guild, oldLeaderId int64) {
 	// 如果找到新会长，更新职位
 	if newLeader != nil {
 		// 更新新会长的职位
-		newLeader.position = GuildPositionLeader
-		guild.members.Store(newLeaderId, newLeader)
-		guild.leaderId = newLeaderId
+		newLeader.Position = GuildPositionLeader
+		guild.Members.Store(newLeaderId, newLeader)
+		guild.LeaderId = newLeaderId
 
 		// 更新旧会长的职位为普通成员
-		if memberInterface, exists := guild.members.Get(oldLeaderId); exists {
+		if memberInterface, exists := guild.Members.Get(oldLeaderId); exists {
 			oldLeader := memberInterface.(*GuildMember)
-			oldLeader.position = GuildPositionMember
-			guild.members.Store(oldLeaderId, oldLeader)
+			oldLeader.Position = GuildPositionMember
+			guild.Members.Store(oldLeaderId, oldLeader)
 		}
 
-		gs.logger.Info("Guild leader transferred", zap.Int64("guildId", guild.guildId), zap.Int64("oldLeaderId", oldLeaderId), zap.Int64("newLeaderId", newLeaderId))
+		gs.logger.Info("Guild leader transferred", zap.Int64("guildId", guild.GuildId), zap.Int64("oldLeaderId", oldLeaderId), zap.Int64("newLeaderId", newLeaderId))
 	}
 }
 
@@ -450,7 +450,7 @@ func (gs *GuildService) SetGuildMemberPosition(operatorId int64, targetPlayerId 
 	guild := guildInterface.(*Guild)
 
 	// 获取目标玩家在公会中的信息
-	memberInterface, exists := guild.members.Get(targetPlayerId)
+	memberInterface, exists := guild.Members.Get(targetPlayerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
@@ -459,26 +459,26 @@ func (gs *GuildService) SetGuildMemberPosition(operatorId int64, targetPlayerId 
 	// 如果设置为会长，需要处理旧会长
 	if newPosition == GuildPositionLeader {
 		// 如果目标玩家已经是会长，不需要处理
-		if member.position == GuildPositionLeader {
+		if member.Position == GuildPositionLeader {
 			return nil
 		}
 
 		// 获取旧会长
-		oldLeaderInterface, exists := guild.members.Get(guild.leaderId)
+		oldLeaderInterface, exists := guild.Members.Get(guild.LeaderId)
 		if exists {
 			oldLeader := oldLeaderInterface.(*GuildMember)
 			// 将旧会长职位改为普通成员
-			oldLeader.position = GuildPositionMember
-			guild.members.Store(guild.leaderId, oldLeader)
+			oldLeader.Position = GuildPositionMember
+			guild.Members.Store(guild.LeaderId, oldLeader)
 		}
 
 		// 更新公会的leaderId
-		guild.leaderId = targetPlayerId
+		guild.LeaderId = targetPlayerId
 	}
 
 	// 更新目标玩家职位
-	member.position = newPosition
-	guild.members.Store(targetPlayerId, member)
+	member.Position = newPosition
+	guild.Members.Store(targetPlayerId, member)
 
 	gs.logger.Info("Guild member position updated", zap.Int64("guildId", guildId), zap.Int64("playerId", targetPlayerId), zap.Int("newPosition", newPosition))
 	return nil
@@ -517,7 +517,7 @@ func (gs *GuildService) UpdateGuildNotice(operatorId int64, notice string) error
 	guild := guildInterface.(*Guild)
 
 	// 更新公告
-	guild.notice = notice
+	guild.Notice = notice
 	gs.guilds.Store(guildId, guild)
 
 	gs.logger.Info("Guild notice updated", zap.Int64("guildId", guildId), zap.String("notice", notice))
@@ -548,14 +548,14 @@ func (gs *GuildService) checkGuildPermission(playerId int64, requiredPosition in
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.members.Get(playerId)
+	memberInterface, exists := guild.Members.Get(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	member := memberInterface.(*GuildMember)
 
 	// 检查权限（职位数字越小，权限越高）
-	if member.position > requiredPosition {
+	if member.Position > requiredPosition {
 		return ErrPermissionDenied
 	}
 
@@ -579,14 +579,14 @@ func (gs *GuildService) CheckGuildPermission(playerId int64, permission int64) e
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.members.Get(playerId)
+	memberInterface, exists := guild.Members.Get(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	member := memberInterface.(*GuildMember)
 
 	// 检查权限（基于权限掩码）
-	if guild.permissionConfig[member.position]&permission == 0 {
+	if guild.PermissionConfig[member.Position]&permission == 0 {
 		return ErrPermissionDenied
 	}
 
@@ -607,7 +607,7 @@ func (gs *GuildService) ProcessGuildApply(operatorId int64, applyId int64, accep
 
 	gs.guilds.Range(func(key, value interface{}) bool {
 		g := value.(*Guild)
-		if a, exists := g.applies.Get(applyId); exists {
+		if a, exists := g.Applies.Get(applyId); exists {
 			apply = a.(*GuildApply)
 			guild = g
 			found = true
@@ -621,25 +621,25 @@ func (gs *GuildService) ProcessGuildApply(operatorId int64, applyId int64, accep
 	}
 
 	// 更新申请状态
-	apply.status = GuildApplyStatusRejected
+	apply.Status = GuildApplyStatusRejected
 	if accept {
 		// 检查公会是否已满
-		if guild.memberCount >= guild.maxMembers {
+		if guild.MemberCount >= guild.MaxMembers {
 			return errors.New("guild is full")
 		}
 
 		// 接受申请，加入公会
-		gs.JoinGuild(apply.playerId, apply.playerName, apply.guildId)
-		apply.status = GuildApplyStatusAccepted
+		gs.JoinGuild(apply.PlayerId, apply.PlayerName, apply.GuildId)
+		apply.Status = GuildApplyStatusAccepted
 	}
 
 	// 保存更新后的申请状态
-	guild.applies.Store(applyId, apply)
+	guild.Applies.Store(applyId, apply)
 
 	// 更新申请
-	guild.applies.Store(applyId, apply)
+	guild.Applies.Store(applyId, apply)
 
-	gs.logger.Info("Guild application processed", zap.Int64("applyId", applyId), zap.Bool("accepted", accept), zap.Int64("playerId", apply.playerId), zap.Int64("guildId", apply.guildId))
+	gs.logger.Info("Guild application processed", zap.Int64("applyId", applyId), zap.Bool("accepted", accept), zap.Int64("playerId", apply.PlayerId), zap.Int64("guildId", apply.GuildId))
 	return nil
 }
 
@@ -660,20 +660,20 @@ func (gs *GuildService) UpdateGuildMemberOnlineStatus(playerId int64, online boo
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.members.Get(playerId)
+	memberInterface, exists := guild.Members.Get(playerId)
 	if !exists {
 		return nil // 玩家不在公会中
 	}
 	member := memberInterface.(*GuildMember)
 
 	// 更新在线状态
-	member.online = online
+	member.Online = online
 	if !online {
-		member.lastOnline = time.Now().UnixMilli()
+		member.LastOnline = time.Now().UnixMilli()
 	}
 
 	// 存储更新后的成员信息
-	guild.members.Store(playerId, member)
+	guild.Members.Store(playerId, member)
 
 	gs.logger.Debug("Guild member online status updated", zap.Int64("playerId", playerId), zap.Bool("online", online))
 	return nil
@@ -689,8 +689,8 @@ func (gs *GuildService) GetGuildMembers(guildId int64) ([]*GuildMember, error) {
 	guild := guildInterface.(*Guild)
 
 	// 获取所有成员
-	members := make([]*GuildMember, 0, guild.memberCount)
-	guild.members.Range(func(key, value interface{}) bool {
+	members := make([]*GuildMember, 0, guild.MemberCount)
+	guild.Members.Range(func(key, value interface{}) bool {
 		member := value.(*GuildMember)
 		members = append(members, member)
 		return true
@@ -716,21 +716,21 @@ func (gs *GuildService) UpdateGuildMemberContribution(playerId int64, amount int
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.members.Get(playerId)
+	memberInterface, exists := guild.Members.Get(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	member := memberInterface.(*GuildMember)
 
 	// 更新贡献
-	member.contribution += amount
-	guild.exp += amount // 公会经验也增加相应的贡献值
+	member.Contribution += amount
+	guild.Exp += amount // 公会经验也增加相应的贡献值
 
 	// 存储更新后的成员信息
-	guild.members.Store(playerId, member)
+	guild.Members.Store(playerId, member)
 	gs.guilds.Store(guildId, guild)
 
-	gs.logger.Info("Guild member contribution updated", zap.Int64("playerId", playerId), zap.Int64("amount", amount), zap.Int64("total", member.contribution))
+	gs.logger.Info("Guild member contribution updated", zap.Int64("playerId", playerId), zap.Int64("amount", amount), zap.Int64("total", member.Contribution))
 	return nil
 }
 
@@ -751,13 +751,13 @@ func (gs *GuildService) GetGuildMemberContribution(playerId int64) (int64, error
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.members.Get(playerId)
+	memberInterface, exists := guild.Members.Get(playerId)
 	if !exists {
 		return 0, ErrPlayerNotInGuild
 	}
 	member := memberInterface.(*GuildMember)
 
-	return member.contribution, nil
+	return member.Contribution, nil
 }
 
 // UpgradeGuild 升级公会
@@ -782,21 +782,21 @@ func (gs *GuildService) UpgradeGuild(operatorId int64) error {
 	guild := guildInterface.(*Guild)
 
 	// 计算升级所需经验
-	requiredExp := int64(guild.level * 10000)
-	if guild.exp < requiredExp {
+	requiredExp := int64(guild.Level * 10000)
+	if guild.Exp < requiredExp {
 		return errors.New("guild exp not enough")
 	}
 
 	// 扣除经验
-	guild.exp -= requiredExp
+	guild.Exp -= requiredExp
 	// 升级
-	guild.level++
+	guild.Level++
 	// 增加最大成员数
-	guild.maxMembers += 10
+	guild.MaxMembers += 10
 
 	// 存储更新后的公会信息
 	gs.guilds.Store(guildId, guild)
 
-	gs.logger.Info("Guild upgraded", zap.Int64("guildId", guildId), zap.Int("oldLevel", guild.level-1), zap.Int("newLevel", guild.level))
+	gs.logger.Info("Guild upgraded", zap.Int64("guildId", guildId), zap.Int("oldLevel", guild.Level-1), zap.Int("newLevel", guild.Level))
 	return nil
 }

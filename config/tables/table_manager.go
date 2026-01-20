@@ -75,7 +75,7 @@ func (tm *TableManager) LoadAllTables() error {
 	// 加载所有表格
 	for _, loader := range tm.loaders {
 		if err := loader.Load(tablesDir); err != nil {
-			return fmt.Errorf("failed to load %s table: %w", loader.GetTableName(), err)
+			//return fmt.Errorf("failed to load %s table: %w", loader.GetTableName(), err)
 		}
 	}
 

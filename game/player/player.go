@@ -9,6 +9,8 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zGameServer/event"
 	"github.com/pzqf/zUtil/zTime"
+
+	"github.com/pzqf/zGameServer/game/object"
 )
 
 // 玩家状态定义
@@ -21,6 +23,7 @@ const (
 // Player 玩家对象
 
 type Player struct {
+	object.LivingObject
 	playerId int64
 	name     string
 	Session  *zNet.TcpServerSession

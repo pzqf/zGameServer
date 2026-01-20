@@ -8,16 +8,16 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zGameServer/db"
 	"github.com/pzqf/zGameServer/db/models"
-	"github.com/pzqf/zGameServer/protocol"
-	"github.com/pzqf/zGameServer/router"
-	"github.com/pzqf/zGameServer/service"
+	"github.com/pzqf/zGameServer/game/player"
+	"github.com/pzqf/zGameServer/net/protocol"
+	"github.com/pzqf/zGameServer/net/router"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
 // playerHandler 玩家请求处理器
 type playerHandler struct {
-	playerService *service.PlayerService
+	playerService *player.Service
 	dbManager     *db.DBManager
 	// 会话管理，用于保存账号和角色的会话信息
 	accountSession map[string]int64 // key: account, value: sessionId
@@ -27,7 +27,7 @@ type playerHandler struct {
 }
 
 // NewPlayerHandler 创建玩家请求处理器
-func NewPlayerHandler(playerService *service.PlayerService) *playerHandler {
+func NewPlayerHandler(playerService *player.Service) *playerHandler {
 	return &playerHandler{
 		playerService:  playerService,
 		accountSession: make(map[string]int64),
@@ -43,7 +43,7 @@ func (h *playerHandler) SetDBManager(dbManager *db.DBManager) {
 }
 
 // RegisterPlayerHandlers 注册玩家相关的消息处理器
-func RegisterPlayerHandlers(router *router.PacketRouter, playerService *service.PlayerService, dbManager *db.DBManager) {
+func RegisterPlayerHandlers(router *router.PacketRouter, playerService *player.Service, dbManager *db.DBManager) {
 	handler := NewPlayerHandler(playerService)
 	handler.SetDBManager(dbManager)
 

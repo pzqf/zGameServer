@@ -3,16 +3,19 @@ package handler
 import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/db"
-	"github.com/pzqf/zGameServer/router"
-	"github.com/pzqf/zGameServer/service"
+	"github.com/pzqf/zGameServer/game/auction"
+	"github.com/pzqf/zGameServer/game/guild"
+	"github.com/pzqf/zGameServer/game/maps"
+	"github.com/pzqf/zGameServer/game/player"
+	"github.com/pzqf/zGameServer/net/router"
 )
 
 // Init 初始化所有处理器
 func Init(router *router.PacketRouter,
-	playerService *service.PlayerService,
-	guildService *service.GuildService,
-	auctionService *service.AuctionService,
-	mapService *service.MapService,
+	playerService *player.Service,
+	guildService *guild.Service,
+	auctionService *auction.Service,
+	mapService *maps.Service,
 	dbManager *db.DBManager) {
 
 	zLog.Info("Initializing handlers...")

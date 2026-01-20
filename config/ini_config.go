@@ -10,6 +10,7 @@ import (
 // Config 存储所有配置信息
 type Config struct {
 	Server    ServerConfig
+	HTTP      HTTPConfig
 	Log       LogConfig
 	Databases map[string]DBConfig // 多数据库配置，key为数据库名称
 }
@@ -22,6 +23,12 @@ type ServerConfig struct {
 	Protocol       string // 协议类型: protobuf, json, xml
 	ServerID       int32  // 服务器ID
 	ServerName     string // 服务器名称
+}
+
+// HTTPConfig HTTP服务配置
+type HTTPConfig struct {
+	ListenAddress string // 监听地址
+	Enabled       bool   // 是否启用HTTP服务
 }
 
 // LogConfig 日志配置
@@ -64,6 +71,14 @@ func GetServerConfig() *ServerConfig {
 		return &ServerConfig{}
 	}
 	return &GlobalConfig.Server
+}
+
+// GetHTTPConfig 获取HTTP服务配置
+func GetHTTPConfig() *HTTPConfig {
+	if GlobalConfig == nil {
+		return &HTTPConfig{}
+	}
+	return &GlobalConfig.HTTP
 }
 
 // GetLogConfig 获取日志配置
@@ -115,6 +130,13 @@ func LoadConfig(filePath string) (*Config, error) {
 		Protocol:       serverSection.Key("protocol").MustString("protobuf"),
 		ServerID:       int32(serverSection.Key("server_id").MustInt(1)),
 		ServerName:     serverSection.Key("server_name").MustString("GameServer"),
+	}
+
+	// 解析HTTP服务配置
+	httpSection := cfg.Section("http")
+	config.HTTP = HTTPConfig{
+		ListenAddress: httpSection.Key("listen_address").MustString("0.0.0.0:8080"),
+		Enabled:       httpSection.Key("enabled").MustBool(true),
 	}
 
 	// 解析日志配置

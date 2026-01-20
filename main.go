@@ -10,9 +10,12 @@ import (
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/config/tables"
 	"github.com/pzqf/zGameServer/db"
+	"github.com/pzqf/zGameServer/game/auction"
+	"github.com/pzqf/zGameServer/game/guild"
+	"github.com/pzqf/zGameServer/game/maps"
+	"github.com/pzqf/zGameServer/game/player"
 	"github.com/pzqf/zGameServer/gameserver"
-	"github.com/pzqf/zGameServer/handler"
-	"github.com/pzqf/zGameServer/service"
+	"github.com/pzqf/zGameServer/net/handler"
 	"go.uber.org/zap"
 )
 
@@ -79,24 +82,24 @@ func main() {
 	gameServer := gameserver.NewGameServer(zLog.GetLogger())
 
 	// 注册玩家系统服务
-	playerService := service.NewPlayerService()
+	playerService := player.NewService()
 	if err := gameServer.AddService(playerService); err != nil {
 		zLog.Fatal("Failed to add player service", zap.Error(err))
 	}
 
 	// 注册全局系统服务
-	guildService := service.NewGuildService()
+	guildService := guild.NewService()
 	if err := gameServer.AddService(guildService); err != nil {
 		zLog.Fatal("Failed to add guild service", zap.Error(err))
 	}
 
-	auctionService := service.NewAuctionService()
+	auctionService := auction.NewService()
 	if err := gameServer.AddService(auctionService); err != nil {
 		zLog.Fatal("Failed to add auction service", zap.Error(err))
 	}
 
 	// 注册地图服务
-	mapService := service.NewMapService()
+	mapService := maps.NewService()
 	if err := gameServer.AddService(mapService); err != nil {
 		zLog.Fatal("Failed to add map service", zap.Error(err))
 	}
