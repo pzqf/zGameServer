@@ -3,11 +3,11 @@ package player
 import (
 	"sync/atomic"
 
-	"go.uber.org/zap"
-
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/event"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
+	"go.uber.org/zap"
 )
 
 // Item 物品结构
@@ -27,7 +27,6 @@ type Item struct {
 type Inventory struct {
 	*component.BaseComponent
 	playerId int64
-	logger   *zap.Logger
 	items    *zMap.Map // key: int(slot), value: *Item
 	size     int
 }
@@ -49,11 +48,10 @@ func NewItem(itemId int64, itemType int, itemName string, count int, maxStack in
 	return item
 }
 
-func NewInventory(playerId int64, logger *zap.Logger) *Inventory {
+func NewInventory(playerId int64) *Inventory {
 	return &Inventory{
 		BaseComponent: component.NewBaseComponent("inventory"),
 		playerId:      playerId,
-		logger:        logger,
 		items:         zMap.NewMap(),
 		size:          60, // 默认背包大小
 	}
@@ -61,14 +59,14 @@ func NewInventory(playerId int64, logger *zap.Logger) *Inventory {
 
 func (inv *Inventory) Init() error {
 	// 初始化背包
-	inv.logger.Debug("Initializing inventory", zap.Int64("playerId", inv.playerId))
+	zLog.Debug("Initializing inventory", zap.Int64("playerId", inv.playerId))
 	return nil
 }
 
 // Destroy 销毁背包组件
 func (inv *Inventory) Destroy() {
 	// 清理背包资源
-	inv.logger.Debug("Destroying inventory", zap.Int64("playerId", inv.playerId))
+	zLog.Debug("Destroying inventory", zap.Int64("playerId", inv.playerId))
 	inv.items.Clear()
 }
 
@@ -304,7 +302,7 @@ func (inv *Inventory) UseItem(slot int, playerLevel int) bool {
 	}
 
 	// TODO: 实现物品使用逻辑
-	inv.logger.Debug("Using item", zap.Int64("itemId", item.itemId), zap.String("itemName", item.itemName), zap.Int64("playerId", inv.playerId))
+	zLog.Debug("Using item", zap.Int64("itemId", item.itemId), zap.String("itemName", item.itemName), zap.Int64("playerId", inv.playerId))
 
 	// 减少物品数量
 	if item.count.Add(-1) <= 0 {

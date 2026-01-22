@@ -3,6 +3,7 @@ package gameserver
 import (
 	"sync"
 
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"go.uber.org/zap"
 )
@@ -10,24 +11,21 @@ import (
 type PacketHandlerFunc func(session *zNet.TcpServerSession, packet *zNet.NetPacket) error
 
 type PacketRouter struct {
-	logger   *zap.Logger
 	handlers sync.Map // key: int32(protoId), value: PacketHandlerFunc
 }
 
-func NewPacketRouter(logger *zap.Logger) *PacketRouter {
-	return &PacketRouter{
-		logger: logger,
-	}
+func NewPacketRouter() *PacketRouter {
+	return &PacketRouter{}
 }
 
 func (pr *PacketRouter) RegisterHandler(protoId int32, handler PacketHandlerFunc) {
 	pr.handlers.Store(protoId, handler)
-	pr.logger.Info("Registered packet handler", zap.Int32("protoId", protoId))
+	zLog.Info("Registered packet handler", zap.Int32("protoId", protoId))
 }
 
 func (pr *PacketRouter) UnregisterHandler(protoId int32) {
 	pr.handlers.Delete(protoId)
-	pr.logger.Info("Unregistered packet handler", zap.Int32("protoId", protoId))
+	zLog.Info("Unregistered packet handler", zap.Int32("protoId", protoId))
 }
 
 func (pr *PacketRouter) Route(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
@@ -38,14 +36,14 @@ func (pr *PacketRouter) Route(session *zNet.TcpServerSession, packet *zNet.NetPa
 	// 查找对应的处理程序
 	handlerInterface, exists := pr.handlers.Load(packet.ProtoId)
 	if !exists {
-		pr.logger.Warn("No handler found for packet", zap.Int32("protoId", packet.ProtoId))
+		zLog.Warn("No handler found for packet", zap.Int32("protoId", packet.ProtoId))
 		return nil
 	}
 
 	// 调用处理程序
 	handler, ok := handlerInterface.(PacketHandlerFunc)
 	if !ok {
-		pr.logger.Error("Invalid packet handler type", zap.Int32("protoId", packet.ProtoId))
+		zLog.Error("Invalid packet handler type", zap.Int32("protoId", packet.ProtoId))
 		return nil
 	}
 

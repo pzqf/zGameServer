@@ -5,25 +5,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.uber.org/zap"
 )
 
 // LoginLogDAO 角色登录/登出日志数据访问对象
 type LoginLogDAO struct {
 	connector connector.DBConnector
-	logger    *zap.Logger
 }
 
 // NewLoginLogDAO 创建角色登录/登出日志DAO实例
 func NewLoginLogDAO(dbConnector connector.DBConnector) *LoginLogDAO {
 	return &LoginLogDAO{
 		connector: dbConnector,
-		logger:    zLog.GetLogger(),
 	}
 }
 

@@ -12,10 +12,10 @@ import (
 
 // Init 初始化所有处理器
 func Init(router *router.PacketRouter,
-	playerService *player.Service,
-	guildService *guild.Service,
-	auctionService *auction.Service,
-	mapService *maps.Service,
+	playerService *player.PlayerService,
+	guildService *guild.GuildService,
+	auctionService *auction.AuctionService,
+	mapService *maps.MapService,
 	dbManager *db.DBManager) {
 
 	zLog.Info("Initializing handlers...")

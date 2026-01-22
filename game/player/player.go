@@ -3,15 +3,15 @@ package player
 import (
 	"sync/atomic"
 
-	"go.uber.org/zap"
-
 	"github.com/pzqf/zEngine/zEvent"
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zGameServer/event"
 	"github.com/pzqf/zUtil/zTime"
 
 	"github.com/pzqf/zGameServer/game/object"
 	"github.com/pzqf/zGameServer/game/object/component"
+	"go.uber.org/zap"
 )
 
 // 玩家状态定义
@@ -27,7 +27,6 @@ type Player struct {
 	playerId int64
 	name     string
 	Session  *zNet.TcpServerSession
-	logger   *zap.Logger
 	status   int
 }
 
@@ -48,7 +47,7 @@ func (bi *BasicInfo) Destroy() {
 	// 这里不需要特别清理，因为没有需要释放的资源
 }
 
-func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession, logger *zap.Logger) *Player {
+func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession) *Player {
 	// 创建基础生命对象
 	livingObj := object.NewLivingObject(uint64(playerId), name)
 
@@ -58,7 +57,6 @@ func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession, logg
 		playerId:     playerId,
 		name:         name,
 		Session:      session,
-		logger:       logger,
 		status:       PlayerStatusOnline,
 	}
 
@@ -84,27 +82,27 @@ func (p *Player) addComponents() {
 	p.AddComponent(basicInfo)
 
 	// 背包组件
-	inventory := NewInventory(p.playerId, p.logger)
+	inventory := NewInventory(p.playerId)
 	inventory.Init()
 	p.AddComponent(inventory)
 
 	// 装备组件
-	equipment := NewEquipment(p.playerId, p.logger)
+	equipment := NewEquipment(p.playerId)
 	equipment.Init()
 	p.AddComponent(equipment)
 
 	// 邮箱组件
-	mailbox := NewMailbox(p.playerId, p.logger)
+	mailbox := NewMailbox(p.playerId)
 	mailbox.Init()
 	p.AddComponent(mailbox)
 
 	// 任务组件
-	tasks := NewTaskManager(p.playerId, p.logger)
+	tasks := NewTaskManager(p.playerId)
 	tasks.Init()
 	p.AddComponent(tasks)
 
 	// 技能组件
-	skills := NewSkillManager(p.playerId, p.logger)
+	skills := NewSkillManager(p.playerId)
 	skills.Init()
 	p.AddComponent(skills)
 }
@@ -196,13 +194,13 @@ func (p *Player) GetSkills() *SkillManager {
 // OnConnect 玩家连接成功
 func (p *Player) OnConnect() {
 	p.status = PlayerStatusOnline
-	p.logger.Info("Player connected", zap.Int64("playerId", p.playerId), zap.String("name", p.name))
+	zLog.Info("Player connected", zap.Int64("playerId", p.playerId), zap.String("name", p.name))
 }
 
 // OnDisconnect 玩家断开连接
 func (p *Player) OnDisconnect() {
 	p.status = PlayerStatusOffline
-	p.logger.Info("Player disconnected", zap.Int64("playerId", p.playerId), zap.String("name", p.name))
+	zLog.Info("Player disconnected", zap.Int64("playerId", p.playerId), zap.String("name", p.name))
 }
 
 // SendPacket 给玩家发送数据包

@@ -3,6 +3,7 @@ package gameserver
 import (
 	"sync"
 
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/net/protolayer"
@@ -13,20 +14,19 @@ import (
 
 type GameServer struct {
 	*zService.ServiceManager
-	logger       *zap.Logger
 	wg           sync.WaitGroup
 	isRunning    bool
 	packetRouter *router.PacketRouter
 	protocol     protolayer.Protocol
 }
 
-func NewGameServer(logger *zap.Logger) *GameServer {
+func NewGameServer() *GameServer {
 	// 使用全局配置
-	return NewGameServerWithConfig(logger, config.GetServerConfig())
+	return NewGameServerWithConfig(config.GetServerConfig())
 }
 
 // NewGameServerWithConfig 使用配置创建游戏服务器
-func NewGameServerWithConfig(logger *zap.Logger, serverCfg *config.ServerConfig) *GameServer {
+func NewGameServerWithConfig(serverCfg *config.ServerConfig) *GameServer {
 	// 根据配置选择协议类型
 	var protocol protolayer.Protocol
 	switch serverCfg.Protocol {
@@ -37,27 +37,26 @@ func NewGameServerWithConfig(logger *zap.Logger, serverCfg *config.ServerConfig)
 	case "xml":
 		protocol = protolayer.NewXMLProtocol()
 	default:
-		logger.Warn("Unknown protocol type, using default protobuf", zap.String("protocol", serverCfg.Protocol))
+		zLog.Warn("Unknown protocol type, using default protobuf", zap.String("protocol", serverCfg.Protocol))
 		protocol = protolayer.NewProtobufProtocol()
 	}
 
 	gs := &GameServer{
 		ServiceManager: zService.NewServiceManager(),
-		logger:         logger,
-		packetRouter:   router.NewPacketRouter(logger),
+		packetRouter:   router.NewPacketRouter(),
 		protocol:       protocol,
 	}
 
 	// 创建并注册TCP服务
 	tcpService := service.NewTcpService(gs.packetRouter)
 	if err := gs.AddService(tcpService); err != nil {
-		logger.Fatal("Failed to add TCP service", zap.Error(err))
+		zLog.Fatal("Failed to add TCP service", zap.Error(err))
 	}
 
 	// 创建并注册HTTP服务
 	httpService := service.NewHTTPService()
 	if err := gs.AddService(httpService); err != nil {
-		logger.Fatal("Failed to add HTTP service", zap.Error(err))
+		zLog.Fatal("Failed to add HTTP service", zap.Error(err))
 	}
 
 	return gs
@@ -65,7 +64,7 @@ func NewGameServerWithConfig(logger *zap.Logger, serverCfg *config.ServerConfig)
 
 func (gs *GameServer) Start() error {
 	// 启动所有服务（包括TCP服务）
-	gs.logger.Info("Starting all game services...")
+	zLog.Info("Starting all game services...")
 	gs.ServeServices()
 
 	gs.isRunning = true
@@ -77,7 +76,7 @@ func (gs *GameServer) Stop() {
 		return
 	}
 
-	gs.logger.Info("Stopping game server...")
+	zLog.Info("Stopping game server...")
 
 	// 关闭所有服务
 	gs.CloseServices()

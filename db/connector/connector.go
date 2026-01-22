@@ -42,7 +42,6 @@ type BaseConnector struct {
 	name        string          // 数据库名称
 	dbConfig    config.DBConfig // 数据库配置
 	driver      string          // 数据库驱动类型
-	logger      *zap.Logger     // 日志记录器
 	mu          sync.Mutex      // 互斥锁，用于并发控制
 	mongoClient *mongo.Client   // MongoDB客户端
 	mongoDB     *mongo.Database // MongoDB数据库

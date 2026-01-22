@@ -32,7 +32,6 @@ func NewMySQLConnector(name string, capacity int) *MySQLConnector {
 		BaseConnector: BaseConnector{
 			name:   name,
 			driver: "mysql",
-			logger: zLog.GetLogger(),
 		},
 		queryCh:  make(chan *DBQuery, capacity),
 		capacity: capacity,
@@ -43,7 +42,6 @@ func NewMySQLConnector(name string, capacity int) *MySQLConnector {
 func (c *MySQLConnector) Init(dbConfig config.DBConfig) {
 	c.dbConfig = dbConfig
 	c.driver = dbConfig.Driver
-	c.logger = zLog.GetLogger()
 
 	// 构建DSN字符串
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
@@ -59,7 +57,7 @@ func (c *MySQLConnector) Init(dbConfig config.DBConfig) {
 	var err error
 	c.db, err = sql.Open("mysql", dsn)
 	if err != nil {
-		c.logger.Error("Failed to open MySQL connection", zap.Error(err))
+		zLog.Error("Failed to open MySQL connection", zap.Error(err))
 		return
 	}
 
@@ -70,11 +68,11 @@ func (c *MySQLConnector) Init(dbConfig config.DBConfig) {
 
 	// 测试连接
 	if err := c.db.Ping(); err != nil {
-		c.logger.Error("Failed to ping MySQL database", zap.Error(err))
+		zLog.Error("Failed to ping MySQL database", zap.Error(err))
 		return
 	}
 
-	c.logger.Info("MySQL connection established",
+	zLog.Info("MySQL connection established",
 		zap.String("host", dbConfig.Host),
 		zap.Int("port", dbConfig.Port),
 		zap.String("dbname", dbConfig.DBName),
@@ -111,7 +109,7 @@ func (c *MySQLConnector) queryWorker() {
 // Query 异步执行MySQL数据库查询
 func (c *MySQLConnector) Query(sql string, args []interface{}, callback func(*sql.Rows, error)) {
 	if !c.isRunning {
-		c.logger.Error("MySQLConnector is not running")
+		zLog.Error("MySQLConnector is not running")
 		if callback != nil {
 			callback(nil, fmt.Errorf("mysql connector is not running"))
 		}
@@ -126,7 +124,7 @@ func (c *MySQLConnector) Query(sql string, args []interface{}, callback func(*sq
 		Callback: callback,
 	}:
 	default:
-		c.logger.Error("MySQL query channel is full")
+		zLog.Error("MySQL query channel is full")
 		if callback != nil {
 			callback(nil, fmt.Errorf("mysql query channel is full"))
 		}
@@ -136,7 +134,7 @@ func (c *MySQLConnector) Query(sql string, args []interface{}, callback func(*sq
 // Execute 异步执行MySQL数据库执行操作（插入、更新、删除等）
 func (c *MySQLConnector) Execute(sql string, args []interface{}, callback func(sql.Result, error)) {
 	if !c.isRunning {
-		c.logger.Error("MySQLConnector is not running")
+		zLog.Error("MySQLConnector is not running")
 		if callback != nil {
 			callback(nil, fmt.Errorf("mysql connector is not running"))
 		}
@@ -171,7 +169,7 @@ func (c *MySQLConnector) Close() error {
 		}
 	}
 
-	c.logger.Info("MySQL connection closed")
+	zLog.Info("MySQL connection closed")
 	return nil
 }
 
@@ -182,12 +180,12 @@ func (c *MySQLConnector) GetDriver() string {
 
 // GetMongoClient 获取MongoDB客户端（MySQL实现中不支持）
 func (c *MySQLConnector) GetMongoClient() *mongo.Client {
-	c.logger.Warn("GetMongoClient called on MySQLConnector")
+	zLog.Warn("GetMongoClient called on MySQLConnector")
 	return nil
 }
 
 // GetMongoDB 获取MongoDB数据库（MySQL实现中不支持）
 func (c *MySQLConnector) GetMongoDB() *mongo.Database {
-	c.logger.Warn("GetMongoDB called on MySQLConnector")
+	zLog.Warn("GetMongoDB called on MySQLConnector")
 	return nil
 }

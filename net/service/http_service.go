@@ -19,17 +19,15 @@ type RouteMap map[string]HTTPHandlerFunc
 // HTTPService HTTP服务
 type HTTPService struct {
 	zObject.BaseObject
-	logger      *zap.Logger
-	server      *http.Server
-	httpConfig  *config.HTTPConfig
-	routes      RouteMap
-	mux         *http.ServeMux
+	server     *http.Server
+	httpConfig *config.HTTPConfig
+	routes     RouteMap
+	mux        *http.ServeMux
 }
 
 // NewHTTPService 创建HTTP服务
 func NewHTTPService() *HTTPService {
 	hs := &HTTPService{
-		logger: zLog.GetLogger(),
 		routes: make(RouteMap),
 		mux:    http.NewServeMux(),
 	}
@@ -40,24 +38,24 @@ func NewHTTPService() *HTTPService {
 // Init 初始化HTTP服务
 func (hs *HTTPService) Init() error {
 	hs.httpConfig = config.GetHTTPConfig()
-	
+
 	// 如果HTTP服务未启用，直接返回
 	if !hs.httpConfig.Enabled {
-		hs.logger.Info("HTTP service is disabled")
+		zLog.Info("HTTP service is disabled")
 		return nil
 	}
-	
-	hs.logger.Info("Initializing HTTP service...", zap.String("listen_address", hs.httpConfig.ListenAddress))
-	
+
+	zLog.Info("Initializing HTTP service...", zap.String("listen_address", hs.httpConfig.ListenAddress))
+
 	// 注册默认路由
 	hs.registerDefaultRoutes()
-	
+
 	// 创建HTTP服务器
 	hs.server = &http.Server{
 		Addr:    hs.httpConfig.ListenAddress,
 		Handler: hs.mux,
 	}
-	
+
 	return nil
 }
 
@@ -67,8 +65,8 @@ func (hs *HTTPService) Close() error {
 	if !hs.httpConfig.Enabled {
 		return nil
 	}
-	
-	hs.logger.Info("Closing HTTP service...")
+
+	zLog.Info("Closing HTTP service...")
 	if hs.server != nil {
 		return hs.server.Close()
 	}
@@ -79,14 +77,14 @@ func (hs *HTTPService) Close() error {
 func (hs *HTTPService) Serve() {
 	// 如果HTTP服务未启用，直接返回
 	if !hs.httpConfig.Enabled {
-		hs.logger.Info("HTTP service is disabled, skipping start")
+		zLog.Info("HTTP service is disabled, skipping start")
 		return
 	}
-	
-	hs.logger.Info("Starting HTTP service...")
+
+	zLog.Info("Starting HTTP service...")
 	if hs.server != nil {
 		if err := hs.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			hs.logger.Error("Failed to start HTTP service", zap.Error(err))
+			zLog.Error("Failed to start HTTP service", zap.Error(err))
 			return
 		}
 	}
@@ -96,7 +94,7 @@ func (hs *HTTPService) Serve() {
 func (hs *HTTPService) RegisterHandler(path string, handler HTTPHandlerFunc) {
 	hs.routes[path] = handler
 	hs.mux.HandleFunc(path, handler)
-	hs.logger.Debug("Registered HTTP handler", zap.String("path", path))
+	zLog.Debug("Registered HTTP handler", zap.String("path", path))
 }
 
 // UnregisterHandler 注销HTTP请求处理函数
@@ -104,7 +102,7 @@ func (hs *HTTPService) UnregisterHandler(path string) {
 	delete(hs.routes, path)
 	// HTTP Mux不支持直接删除路由，需要重新创建
 	hs.recreateMux()
-	hs.logger.Debug("Unregistered HTTP handler", zap.String("path", path))
+	zLog.Debug("Unregistered HTTP handler", zap.String("path", path))
 }
 
 // recreateMux 重新创建HTTP路由Mux
@@ -125,7 +123,7 @@ func (hs *HTTPService) registerDefaultRoutes() {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "OK")
 	})
-	
+
 	// 服务器状态路由
 	hs.RegisterHandler("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

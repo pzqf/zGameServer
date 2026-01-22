@@ -1,10 +1,10 @@
 package player
 
 import (
-	"go.uber.org/zap"
-
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
+	"go.uber.org/zap"
 )
 
 // 任务状态定义
@@ -75,16 +75,14 @@ type Task struct {
 type TaskManager struct {
 	*component.BaseComponent
 	playerId int64
-	logger   *zap.Logger
 	tasks    *zMap.Map // key: int64(taskId), value: *Task
 	maxCount int
 }
 
-func NewTaskManager(playerId int64, logger *zap.Logger) *TaskManager {
+func NewTaskManager(playerId int64) *TaskManager {
 	return &TaskManager{
 		BaseComponent: component.NewBaseComponent("tasks"),
 		playerId:      playerId,
-		logger:        logger,
 		tasks:         zMap.NewMap(),
 		maxCount:      20, // 最大同时进行的任务数量
 	}
@@ -92,14 +90,14 @@ func NewTaskManager(playerId int64, logger *zap.Logger) *TaskManager {
 
 func (tm *TaskManager) Init() error {
 	// 初始化任务管理系统
-	tm.logger.Debug("Initializing task manager", zap.Int64("playerId", tm.playerId))
+	zLog.Debug("Initializing task manager", zap.Int64("playerId", tm.playerId))
 	return nil
 }
 
 // Destroy 销毁任务管理组件
 func (tm *TaskManager) Destroy() {
 	// 清理任务管理资源
-	tm.logger.Debug("Destroying task manager", zap.Int64("playerId", tm.playerId))
+	zLog.Debug("Destroying task manager", zap.Int64("playerId", tm.playerId))
 	tm.tasks.Clear()
 }
 
@@ -118,7 +116,7 @@ func (tm *TaskManager) AcceptTask(task *Task) error {
 	// 接受任务
 	task.status = TaskStatusInProgress
 	tm.tasks.Store(task.taskId, task)
-	tm.logger.Info("Task accepted", zap.Int64("taskId", task.taskId), zap.Int64("playerId", tm.playerId))
+	zLog.Info("Task accepted", zap.Int64("taskId", task.taskId), zap.Int64("playerId", tm.playerId))
 	return nil
 }
 
@@ -159,7 +157,7 @@ func (tm *TaskManager) UpdateTaskProgress(taskId int64, condType int, progress i
 	// 如果所有条件都完成，将任务状态改为已完成
 	if allCompleted {
 		task.status = TaskStatusCompleted
-		tm.logger.Info("Task completed", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
+		zLog.Info("Task completed", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
 	}
 
 	// 更新任务
@@ -185,7 +183,7 @@ func (tm *TaskManager) CompleteTask(taskId int64) ([]*TaskReward, error) {
 	tm.tasks.Store(taskId, task)
 
 	// 返回任务奖励
-	tm.logger.Info("Task rewarded", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
+	zLog.Info("Task rewarded", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
 	return task.rewards, nil
 }
 
@@ -256,6 +254,6 @@ func (tm *TaskManager) AbandonTask(taskId int64) bool {
 
 	// 删除任务
 	tm.tasks.Delete(taskId)
-	tm.logger.Info("Task abandoned", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
+	zLog.Info("Task abandoned", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
 	return true
 }

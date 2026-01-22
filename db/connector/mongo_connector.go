@@ -23,7 +23,6 @@ func NewMongoConnector(name string) *MongoConnector {
 		BaseConnector: BaseConnector{
 			name:   name,
 			driver: "mongo",
-			logger: zLog.GetLogger(),
 		},
 	}
 }
@@ -32,7 +31,6 @@ func NewMongoConnector(name string) *MongoConnector {
 func (c *MongoConnector) Init(dbConfig config.DBConfig) {
 	c.dbConfig = dbConfig
 	c.driver = dbConfig.Driver
-	c.logger = zLog.GetLogger()
 
 	// 构建MongoDB连接字符串
 	var uri string
@@ -63,20 +61,20 @@ func (c *MongoConnector) Init(dbConfig config.DBConfig) {
 	var err error
 	c.mongoClient, err = mongo.Connect(nil, clientOptions)
 	if err != nil {
-		c.logger.Error("Failed to create MongoDB client", zap.Error(err))
+		zLog.Error("Failed to create MongoDB client", zap.Error(err))
 		return
 	}
 
 	// 测试连接
 	if err := c.mongoClient.Ping(nil, nil); err != nil {
-		c.logger.Error("Failed to ping MongoDB database", zap.Error(err))
+		zLog.Error("Failed to ping MongoDB database", zap.Error(err))
 		return
 	}
 
 	// 获取MongoDB数据库实例
 	c.mongoDB = c.mongoClient.Database(dbConfig.DBName)
 
-	c.logger.Info("MongoDB connection established",
+	zLog.Info("MongoDB connection established",
 		zap.String("host", dbConfig.Host),
 		zap.Int("port", dbConfig.Port),
 		zap.String("dbname", dbConfig.DBName),
@@ -92,14 +90,14 @@ func (c *MongoConnector) Start() error {
 	c.isRunning = true
 
 	// MongoDB不需要额外的启动逻辑，连接已经在Init时建立
-	c.logger.Info("MongoDB connector started")
+	zLog.Info("MongoDB connector started")
 	return nil
 }
 
 // Query 执行MongoDB查询操作
 func (c *MongoConnector) Query(sql string, args []interface{}, callback func(*sql.Rows, error)) {
 	if !c.isRunning {
-		c.logger.Error("MongoConnector is not running")
+		zLog.Error("MongoConnector is not running")
 		if callback != nil {
 			callback(nil, fmt.Errorf("mongo connector is not running"))
 		}
@@ -108,7 +106,7 @@ func (c *MongoConnector) Query(sql string, args []interface{}, callback func(*sq
 
 	// MongoDB不直接支持SQL查询，这里需要将SQL查询转换为MongoDB查询
 	// 这是一个简化实现，实际应用中需要更复杂的SQL到MongoDB查询转换
-	c.logger.Warn("SQL to MongoDB query conversion not fully implemented", zap.String("sql", sql))
+	zLog.Warn("SQL to MongoDB query conversion not fully implemented", zap.String("sql", sql))
 
 	if callback != nil {
 		callback(nil, fmt.Errorf("SQL query not supported in MongoDB"))
@@ -118,7 +116,7 @@ func (c *MongoConnector) Query(sql string, args []interface{}, callback func(*sq
 // Execute 执行MongoDB执行操作
 func (c *MongoConnector) Execute(sql string, args []interface{}, callback func(sql.Result, error)) {
 	if !c.isRunning {
-		c.logger.Error("MongoConnector is not running")
+		zLog.Error("MongoConnector is not running")
 		if callback != nil {
 			callback(nil, fmt.Errorf("mongo connector is not running"))
 		}
@@ -127,7 +125,7 @@ func (c *MongoConnector) Execute(sql string, args []interface{}, callback func(s
 
 	// MongoDB不直接支持SQL执行，这里需要将SQL执行转换为MongoDB操作
 	// 这是一个简化实现，实际应用中需要更复杂的SQL到MongoDB操作转换
-	c.logger.Warn("SQL to MongoDB execute conversion not fully implemented", zap.String("sql", sql))
+	zLog.Warn("SQL to MongoDB execute conversion not fully implemented", zap.String("sql", sql))
 
 	if callback != nil {
 		callback(nil, fmt.Errorf("SQL execute not supported in MongoDB"))
@@ -149,7 +147,7 @@ func (c *MongoConnector) Close() error {
 		}
 	}
 
-	c.logger.Info("MongoDB connection closed")
+	zLog.Info("MongoDB connection closed")
 	return nil
 }
 

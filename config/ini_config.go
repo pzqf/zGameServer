@@ -9,10 +9,20 @@ import (
 
 // Config 存储所有配置信息
 type Config struct {
-	Server    ServerConfig
-	HTTP      HTTPConfig
-	Log       LogConfig
-	Databases map[string]DBConfig // 多数据库配置，key为数据库名称
+	Server      ServerConfig
+	HTTP        HTTPConfig
+	Log         LogConfig
+	Compression CompressionConfig
+	Databases   map[string]DBConfig // 多数据库配置，key为数据库名称
+}
+
+// CompressionConfig 压缩配置
+type CompressionConfig struct {
+	Enabled    bool // 是否启用压缩
+	Threshold  int  // 压缩阈值（字节）
+	Level      int  // 压缩级别（1-9，1最快，9压缩率最高）
+	MinQuality int  // 最低网络质量（0-100）
+	MaxQuality int  // 最高网络质量（0-100）
 }
 
 // ServerConfig 服务器网络配置
@@ -108,6 +118,20 @@ func GetAllDBConfigs() map[string]DBConfig {
 	return GlobalConfig.Databases
 }
 
+// GetCompressionConfig 获取压缩配置
+func GetCompressionConfig() *CompressionConfig {
+	if GlobalConfig == nil {
+		return &CompressionConfig{
+			Enabled:    true,
+			Threshold:  1024,
+			Level:      5,
+			MinQuality: 0,
+			MaxQuality: 100,
+		}
+	}
+	return &GlobalConfig.Compression
+}
+
 // LoadConfig 从INI文件加载配置
 func LoadConfig(filePath string) (*Config, error) {
 	// 直接使用ini库加载配置文件
@@ -147,6 +171,16 @@ func LoadConfig(filePath string) (*Config, error) {
 		Path:    logSection.Key("path").MustString("./logs/server.log"),
 		MaxSize: logSection.Key("max_size").MustInt(100),
 		MaxAge:  logSection.Key("max_age").MustInt(30),
+	}
+
+	// 解析压缩配置
+	compressionSection := cfg.Section("compression")
+	config.Compression = CompressionConfig{
+		Enabled:    compressionSection.Key("enabled").MustBool(true),
+		Threshold:  compressionSection.Key("threshold").MustInt(1024),
+		Level:      compressionSection.Key("level").MustInt(5),
+		MinQuality: compressionSection.Key("min_quality").MustInt(0),
+		MaxQuality: compressionSection.Key("max_quality").MustInt(100),
 	}
 
 	// 解析数据库配置

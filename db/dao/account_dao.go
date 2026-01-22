@@ -4,24 +4,20 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/models"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.uber.org/zap"
 )
 
 // AccountDAO 账号数据访问对象
 type AccountDAO struct {
 	connector connector.DBConnector
-	logger    *zap.Logger
 }
 
 // NewAccountDAO 创建账号DAO实例
 func NewAccountDAO(dbConnector connector.DBConnector) *AccountDAO {
 	return &AccountDAO{
 		connector: dbConnector,
-		logger:    zLog.GetLogger(),
 	}
 }
 

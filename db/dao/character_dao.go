@@ -4,24 +4,20 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/models"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.uber.org/zap"
 )
 
 // CharacterDAO 角色数据访问对象
 type CharacterDAO struct {
 	connector connector.DBConnector
-	logger    *zap.Logger
 }
 
 // NewCharacterDAO 创建角色DAO实例
 func NewCharacterDAO(dbConnector connector.DBConnector) *CharacterDAO {
 	return &CharacterDAO{
 		connector: dbConnector,
-		logger:    zLog.GetLogger(),
 	}
 }
 

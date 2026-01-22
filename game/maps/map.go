@@ -56,7 +56,6 @@ type Map struct {
 	instanceOwner int64     // 实例所有者（如果有）
 	maxPlayers    int
 	playerCount   int
-	logger        *zap.Logger
 }
 
 // 地图JSON数据结构体
@@ -134,7 +133,6 @@ func NewMap(mapId int64, name string, mapType int, width, height, regionSize, ti
 		instanceOwner: 0,
 		maxPlayers:    100,
 		playerCount:   0,
-		logger:        zLog.GetLogger(),
 	}
 
 	// 初始化地图区域
@@ -148,14 +146,14 @@ func (m *Map) LoadFromFile(filePath string) error {
 	// 读取地图文件
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		m.logger.Error("Failed to read map file", zap.String("file_path", filePath), zap.Error(err))
+		zLog.Error("Failed to read map file", zap.String("file_path", filePath), zap.Error(err))
 		return err
 	}
 
 	// 解析JSON数据
 	var mapData MapJSONData
 	if err := json.Unmarshal(data, &mapData); err != nil {
-		m.logger.Error("Failed to parse map JSON", zap.String("file_path", filePath), zap.Error(err))
+		zLog.Error("Failed to parse map JSON", zap.String("file_path", filePath), zap.Error(err))
 		return err
 	}
 
@@ -180,7 +178,7 @@ func (m *Map) LoadFromFile(filePath string) error {
 
 	m.SetId(m.mapId)
 
-	m.logger.Info("Map loaded successfully from file", zap.Int64("mapId", m.mapId), zap.String("mapName", m.name), zap.String("file_path", filePath))
+	zLog.Info("Map loaded successfully from file", zap.Int64("mapId", m.mapId), zap.String("mapName", m.name), zap.String("file_path", filePath))
 	return nil
 }
 
@@ -327,7 +325,7 @@ func (m *Map) AddObject(obj common.IGameObject) {
 	// 获取区域
 	regionInterface, exists := m.regions.Get(regionId)
 	if !exists {
-		m.logger.Warn("Region not found", zap.Int("regionId", regionId), zap.Float64("x", x), zap.Float64("y", y))
+		zLog.Warn("Region not found", zap.Int("regionId", regionId), zap.Float64("x", x), zap.Float64("y", y))
 		return
 	}
 	region := regionInterface.(*MapRegion)
@@ -346,19 +344,19 @@ func (m *Map) AddObject(obj common.IGameObject) {
 	switch objectType {
 	case object.GameObjectTypeNPC:
 		m.npcs.Store(objectId, obj)
-		m.logger.Debug("NPC added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("NPC added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	case object.GameObjectTypeMonster:
 		m.monsters.Store(objectId, obj)
-		m.logger.Debug("Monster added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Monster added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	case object.GameObjectTypePlayer:
 		m.players.Store(objectId, obj)
 		m.playerCount++
-		m.logger.Debug("Player added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Player added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	case object.GameObjectTypeItem:
 		m.dropItems.Store(objectId, obj)
-		m.logger.Debug("Item added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Item added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	default:
-		m.logger.Debug("Object added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Object added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	}
 }
 
@@ -395,19 +393,19 @@ func (m *Map) RemoveObject(objectId int64) {
 	switch objectType {
 	case object.GameObjectTypeNPC:
 		m.npcs.Delete(objectId)
-		m.logger.Debug("NPC removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("NPC removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	case object.GameObjectTypeMonster:
 		m.monsters.Delete(objectId)
-		m.logger.Debug("Monster removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Monster removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	case object.GameObjectTypePlayer:
 		m.players.Delete(objectId)
 		m.playerCount--
-		m.logger.Debug("Player removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Player removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	case object.GameObjectTypeItem:
 		m.dropItems.Delete(objectId)
-		m.logger.Debug("Item removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Item removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	default:
-		m.logger.Debug("Object removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+		zLog.Debug("Object removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	}
 }
 

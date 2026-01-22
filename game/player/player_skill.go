@@ -3,6 +3,7 @@ package player
 import (
 	"time"
 
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
@@ -68,16 +69,14 @@ type Skill struct {
 type SkillManager struct {
 	*component.BaseComponent
 	playerId int64
-	logger   *zap.Logger
 	skills   *zMap.Map // key: int64(skillId), value: *Skill
 	maxCount int
 }
 
-func NewSkillManager(playerId int64, logger *zap.Logger) *SkillManager {
+func NewSkillManager(playerId int64) *SkillManager {
 	return &SkillManager{
 		BaseComponent: component.NewBaseComponent("skills"),
 		playerId:      playerId,
-		logger:        logger,
 		skills:        zMap.NewMap(),
 		maxCount:      50, // 最大技能数量
 	}
@@ -85,7 +84,7 @@ func NewSkillManager(playerId int64, logger *zap.Logger) *SkillManager {
 
 func (sm *SkillManager) Init() error {
 	// 初始化技能管理系统
-	sm.logger.Debug("Initializing skill manager", zap.Int64("playerId", sm.playerId))
+	zLog.Debug("Initializing skill manager", zap.Int64("playerId", sm.playerId))
 	// 为新玩家初始化基础技能
 	sm.initBasicSkills()
 	return nil
@@ -94,7 +93,7 @@ func (sm *SkillManager) Init() error {
 // Destroy 销毁技能管理组件
 func (sm *SkillManager) Destroy() {
 	// 清理技能管理资源
-	sm.logger.Debug("Destroying skill manager", zap.Int64("playerId", sm.playerId))
+	zLog.Debug("Destroying skill manager", zap.Int64("playerId", sm.playerId))
 	sm.skills.Clear()
 }
 
@@ -171,7 +170,7 @@ func (sm *SkillManager) LearnSkill(skillId int64) error {
 	// 假设我们已经获取了技能信息
 	// sm.skills.Store(skillId, skill)
 
-	sm.logger.Info("Skill learned", zap.Int64("skillId", skillId), zap.Int64("playerId", sm.playerId))
+	zLog.Info("Skill learned", zap.Int64("skillId", skillId), zap.Int64("playerId", sm.playerId))
 	return nil
 }
 
@@ -223,7 +222,7 @@ func (sm *SkillManager) UpgradeSkill(skillId int64) error {
 	sm.UpdateSkillEffects(skill)
 
 	sm.skills.Store(skillId, skill)
-	sm.logger.Info("Skill upgraded", zap.Int64("skillId", skillId), zap.Int("level", skill.level), zap.Int64("playerId", sm.playerId))
+	zLog.Info("Skill upgraded", zap.Int64("skillId", skillId), zap.Int("level", skill.level), zap.Int64("playerId", sm.playerId))
 	return nil
 }
 
@@ -256,7 +255,7 @@ func (sm *SkillManager) UseSkill(skillId int64, targetId int64) error {
 	// TODO: 应用技能效果
 
 	sm.skills.Store(skillId, skill)
-	sm.logger.Info("Skill used", zap.Int64("skillId", skillId), zap.Int64("targetId", targetId), zap.Int64("playerId", sm.playerId))
+	zLog.Info("Skill used", zap.Int64("skillId", skillId), zap.Int64("targetId", targetId), zap.Int64("playerId", sm.playerId))
 	return nil
 }
 

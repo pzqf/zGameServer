@@ -1,10 +1,10 @@
 package player
 
 import (
-	"go.uber.org/zap"
-
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
+	"go.uber.org/zap"
 )
 
 // 装备位置定义
@@ -25,29 +25,27 @@ const (
 type Equipment struct {
 	*component.BaseComponent
 	playerId   int64
-	logger     *zap.Logger
 	equipments *zMap.Map // key: int(equipPos), value: *Item
 }
 
-func NewEquipment(playerId int64, logger *zap.Logger) *Equipment {
+func NewEquipment(playerId int64) *Equipment {
 	return &Equipment{
 		BaseComponent: component.NewBaseComponent("equipment"),
 		playerId:      playerId,
-		logger:        logger,
 		equipments:    zMap.NewMap(),
 	}
 }
 
 func (eq *Equipment) Init() error {
 	// 初始化装备系统
-	eq.logger.Debug("Initializing equipment", zap.Int64("playerId", eq.playerId))
+	zLog.Debug("Initializing equipment", zap.Int64("playerId", eq.playerId))
 	return nil
 }
 
 // Destroy 销毁装备组件
 func (eq *Equipment) Destroy() {
 	// 清理装备资源
-	eq.logger.Debug("Destroying equipment", zap.Int64("playerId", eq.playerId))
+	zLog.Debug("Destroying equipment", zap.Int64("playerId", eq.playerId))
 	eq.equipments.Clear()
 }
 
@@ -72,7 +70,7 @@ func (eq *Equipment) Equip(equipPos int, item *Item) (*Item, error) {
 
 	// 装备新物品
 	eq.equipments.Store(equipPos, item)
-	eq.logger.Info("Item equipped", zap.Int64("playerId", eq.playerId), zap.Int("equipPos", equipPos), zap.Int64("itemId", item.itemId))
+	zLog.Info("Item equipped", zap.Int64("playerId", eq.playerId), zap.Int("equipPos", equipPos), zap.Int64("itemId", item.itemId))
 
 	return oldItemPtr, nil
 }
@@ -92,7 +90,7 @@ func (eq *Equipment) Unequip(equipPos int) (*Item, error) {
 
 	// 卸下装备
 	eq.equipments.Delete(equipPos)
-	eq.logger.Info("Item unequipped", zap.Int64("playerId", eq.playerId), zap.Int("equipPos", equipPos))
+	zLog.Info("Item unequipped", zap.Int64("playerId", eq.playerId), zap.Int("equipPos", equipPos))
 
 	return item.(*Item), nil
 }

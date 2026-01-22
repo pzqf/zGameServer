@@ -3,11 +3,11 @@ package player
 import (
 	"sync"
 
-	"go.uber.org/zap"
-
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/event"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
+	"go.uber.org/zap"
 )
 
 // 邮件状态定义
@@ -35,17 +35,15 @@ type Mail struct {
 type Mailbox struct {
 	*component.BaseComponent
 	playerId int64
-	logger   *zap.Logger
 	mails    *zMap.Map // key: int64(mailId), value: *Mail
 	maxCount int
 	mu       sync.RWMutex // 用于保护邮箱操作的互斥锁
 }
 
-func NewMailbox(playerId int64, logger *zap.Logger) *Mailbox {
+func NewMailbox(playerId int64) *Mailbox {
 	return &Mailbox{
 		BaseComponent: component.NewBaseComponent("mailbox"),
 		playerId:      playerId,
-		logger:        logger,
 		mails:         zMap.NewMap(),
 		maxCount:      100, // 邮箱最大容量
 	}
@@ -53,14 +51,14 @@ func NewMailbox(playerId int64, logger *zap.Logger) *Mailbox {
 
 func (mb *Mailbox) Init() error {
 	// 初始化邮箱系统
-	mb.logger.Debug("Initializing mailbox", zap.Int64("playerId", mb.playerId))
+	zLog.Debug("Initializing mailbox", zap.Int64("playerId", mb.playerId))
 	return nil
 }
 
 // Destroy 销毁邮箱组件
 func (mb *Mailbox) Destroy() {
 	// 清理邮箱资源
-	mb.logger.Debug("Destroying mailbox", zap.Int64("playerId", mb.playerId))
+	zLog.Debug("Destroying mailbox", zap.Int64("playerId", mb.playerId))
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
 	mb.mails.Clear()
@@ -94,7 +92,7 @@ func (mb *Mailbox) SendMail(mail *Mail) error {
 
 	// 添加邮件
 	mb.mails.Store(mail.mailId, mail)
-	mb.logger.Info("Mail sent", zap.Int64("mailId", mail.mailId), zap.Int64("senderId", mail.senderId), zap.Int64("receiverId", mail.receiverId))
+	zLog.Info("Mail sent", zap.Int64("mailId", mail.mailId), zap.Int64("senderId", mail.senderId), zap.Int64("receiverId", mail.receiverId))
 
 	// 发布邮件接收事件
 	eventData := &event.PlayerMailEventData{
@@ -171,7 +169,7 @@ func (mb *Mailbox) DeleteMail(mailId int64) error {
 
 	// 删除邮件
 	mb.mails.Delete(mailId)
-	mb.logger.Info("Mail deleted", zap.Int64("mailId", mailId), zap.Int64("playerId", mb.playerId))
+	zLog.Info("Mail deleted", zap.Int64("mailId", mailId), zap.Int64("playerId", mb.playerId))
 	return nil
 }
 
@@ -197,7 +195,7 @@ func (mb *Mailbox) ClaimAttachments(mailId int64) (*zMap.Map, error) {
 	m.attachments = zMap.NewMap()
 	mb.mails.Store(mailId, m)
 
-	mb.logger.Info("Claimed mail attachments", zap.Int64("mailId", mailId), zap.Int64("playerId", mb.playerId))
+	zLog.Info("Claimed mail attachments", zap.Int64("mailId", mailId), zap.Int64("playerId", mb.playerId))
 
 	// 发布邮件附件领取事件
 	eventData := &event.PlayerMailEventData{

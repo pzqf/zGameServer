@@ -9,9 +9,9 @@ import (
 	"go.uber.org/zap"
 )
 
-type Service struct {
+// AuctionService 拍卖行服务
+type AuctionService struct {
 	zObject.BaseObject
-	logger          *zap.Logger
 	items           *zMap.Map // key: int64(auctionId), value: *AuctionItem
 	playerItems     *zMap.Map // key: int64(playerId), value: []int64(auctionId)
 	pendingItems    []int64   // 待开始的拍卖物品ID
@@ -20,10 +20,8 @@ type Service struct {
 	minBidIncrement int64     // 最小竞拍加价
 }
 
-func NewService() *Service {
-	logger := zLog.GetLogger()
-	as := &Service{
-		logger:          logger,
+func NewAuctionService() *AuctionService {
+	as := &AuctionService{
 		items:           zMap.NewMap(),
 		playerItems:     zMap.NewMap(),
 		pendingItems:    make([]int64, 0),
@@ -31,18 +29,18 @@ func NewService() *Service {
 		feeRate:         0.05, // 5%手续费
 		minBidIncrement: 10,   // 最小加价10
 	}
-	as.SetId("auction_service")
+	as.BaseObject.Id = "AuctionService"
 	return as
 }
 
-func (as *Service) Init() error {
-	as.logger.Info("Initializing auction service...")
+func (as *AuctionService) Init() error {
+	zLog.Info("Initializing auction service...")
 	// 初始化拍卖行服务相关资源
 	return nil
 }
 
-func (as *Service) Close() error {
-	as.logger.Info("Closing auction service...")
+func (as *AuctionService) Close() error {
+	zLog.Info("Closing auction service...")
 	// 清理拍卖行服务相关资源
 	as.items.Clear()
 	as.playerItems.Clear()
@@ -51,13 +49,13 @@ func (as *Service) Close() error {
 	return nil
 }
 
-func (as *Service) Serve() {
+func (as *AuctionService) Serve() {
 	// 拍卖行服务需要持续运行的协程，用于处理拍卖的开始和结束
 	go as.auctionTimerLoop()
 }
 
 // auctionTimerLoop 拍卖计时器循环
-func (as *Service) auctionTimerLoop() {
+func (as *AuctionService) auctionTimerLoop() {
 	// 每500毫秒检查一次拍卖状态
 	for range time.Tick(time.Millisecond * 500) {
 		currentTime := time.Now().UnixMilli()
@@ -67,7 +65,7 @@ func (as *Service) auctionTimerLoop() {
 }
 
 // checkPendingAuctions 检查待开始的拍卖
-func (as *Service) checkPendingAuctions(currentTime int64) {
+func (as *AuctionService) checkPendingAuctions(currentTime int64) {
 	// 遍历待开始的拍卖列表
 	for i := 0; i < len(as.pendingItems); {
 		auctionId := as.pendingItems[i]
@@ -87,7 +85,7 @@ func (as *Service) checkPendingAuctions(currentTime int64) {
 			// 从待开始列表中移除
 			as.pendingItems = append(as.pendingItems[:i], as.pendingItems[i+1:]...)
 
-			as.logger.Info("Auction started", zap.Int64("auctionId", auctionId), zap.Int64("itemId", item.ItemId))
+			zLog.Info("Auction started", zap.Int64("auctionId", auctionId), zap.Int64("itemId", item.ItemId))
 		} else {
 			i++
 		}
@@ -95,7 +93,7 @@ func (as *Service) checkPendingAuctions(currentTime int64) {
 }
 
 // checkActiveAuctions 检查进行中的拍卖
-func (as *Service) checkActiveAuctions(currentTime int64) {
+func (as *AuctionService) checkActiveAuctions(currentTime int64) {
 	// 遍历进行中的拍卖列表
 	for i := 0; i < len(as.activeItems); {
 		auctionId := as.activeItems[i]
@@ -113,7 +111,7 @@ func (as *Service) checkActiveAuctions(currentTime int64) {
 			// 从进行中列表中移除
 			as.activeItems = append(as.activeItems[:i], as.activeItems[i+1:]...)
 
-			as.logger.Info("Auction ended", zap.Int64("auctionId", auctionId), zap.Int64("itemId", item.ItemId))
+			zLog.Info("Auction ended", zap.Int64("auctionId", auctionId), zap.Int64("itemId", item.ItemId))
 
 			// 结算拍卖
 			go as.SettleAuction(auctionId)
@@ -123,8 +121,28 @@ func (as *Service) checkActiveAuctions(currentTime int64) {
 	}
 }
 
+// removeFromPendingItems 从待开始列表中移除拍卖
+func (as *AuctionService) removeFromPendingItems(auctionId int64) {
+	for i, id := range as.pendingItems {
+		if id == auctionId {
+			as.pendingItems = append(as.pendingItems[:i], as.pendingItems[i+1:]...)
+			return
+		}
+	}
+}
+
+// removeFromActiveItems 从进行中列表中移除拍卖
+func (as *AuctionService) removeFromActiveItems(auctionId int64) {
+	for i, id := range as.activeItems {
+		if id == auctionId {
+			as.activeItems = append(as.activeItems[:i], as.activeItems[i+1:]...)
+			return
+		}
+	}
+}
+
 // CreateAuction 创建拍卖
-func (as *Service) CreateAuction(item *AuctionItem) error {
+func (as *AuctionService) CreateAuction(item *AuctionItem) error {
 	// 检查拍卖物品是否已存在
 	if _, exists := as.items.Get(item.AuctionId); exists {
 		return nil // 拍卖物品已存在
@@ -157,12 +175,12 @@ func (as *Service) CreateAuction(item *AuctionItem) error {
 	//     item.Status = AuctionStatusCompleted
 	// }
 
-	as.logger.Info("Auction created", zap.Int64("auctionId", item.AuctionId), zap.Int64("sellerId", item.SellerId), zap.Int64("itemId", item.ItemId))
+	zLog.Info("Auction created", zap.Int64("auctionId", item.AuctionId), zap.Int64("sellerId", item.SellerId), zap.Int64("itemId", item.ItemId))
 	return nil
 }
 
 // PlaceBid 竞拍物品
-func (as *Service) PlaceBid(playerId int64, playerName string, auctionId int64, bidPrice int64) error {
+func (as *AuctionService) PlaceBid(playerId int64, playerName string, auctionId int64, bidPrice int64) error {
 	// 获取拍卖物品
 	itemInterface, exists := as.items.Get(auctionId)
 	if !exists {
@@ -198,12 +216,12 @@ func (as *Service) PlaceBid(playerId int64, playerName string, auctionId int64, 
 	item.CurrentWinner = playerId
 	item.Bids.Store(bid.BidId, bid)
 
-	as.logger.Info("Bid placed", zap.Int64("auctionId", auctionId), zap.Int64("playerId", playerId), zap.Int64("bidPrice", bidPrice))
+	zLog.Info("Bid placed", zap.Int64("auctionId", auctionId), zap.Int64("playerId", playerId), zap.Int64("bidPrice", bidPrice))
 	return nil
 }
 
 // BuyoutItem 一口价购买物品
-func (as *Service) BuyoutItem(playerId int64, playerName string, auctionId int64) error {
+func (as *AuctionService) BuyoutItem(playerId int64, playerName string, auctionId int64) error {
 	// 获取拍卖物品
 	itemInterface, exists := as.items.Get(auctionId)
 	if !exists {
@@ -237,12 +255,12 @@ func (as *Service) BuyoutItem(playerId int64, playerName string, auctionId int64
 	// 从进行中列表中移除
 	// as.removeFromActiveItems(auctionId)
 
-	as.logger.Info("Item bought out", zap.Int64("auctionId", auctionId), zap.Int64("playerId", playerId), zap.Int64("buyoutPrice", item.BuyoutPrice))
+	zLog.Info("Item bought out", zap.Int64("auctionId", auctionId), zap.Int64("playerId", playerId), zap.Int64("buyoutPrice", item.BuyoutPrice))
 	return nil
 }
 
 // CancelAuction 取消拍卖
-func (as *Service) CancelAuction(auctionId int64) error {
+func (as *AuctionService) CancelAuction(auctionId int64) error {
 	// 获取拍卖物品
 	itemInterface, exists := as.items.Get(auctionId)
 	if !exists {
@@ -265,12 +283,12 @@ func (as *Service) CancelAuction(auctionId int64) error {
 	//     as.removeFromActiveItems(auctionId)
 	// }
 
-	as.logger.Info("Auction canceled", zap.Int64("auctionId", auctionId), zap.Int64("sellerId", item.SellerId))
+	zLog.Info("Auction canceled", zap.Int64("auctionId", auctionId), zap.Int64("sellerId", item.SellerId))
 	return nil
 }
 
 // SettleAuction 结算拍卖
-func (as *Service) SettleAuction(auctionId int64) error {
+func (as *AuctionService) SettleAuction(auctionId int64) error {
 	// 获取拍卖物品
 	itemInterface, exists := as.items.Get(auctionId)
 	if !exists {
@@ -291,12 +309,12 @@ func (as *Service) SettleAuction(auctionId int64) error {
 	// 标记拍卖已结算
 	item.IsSettled = true
 
-	as.logger.Info("Auction settled", zap.Int64("auctionId", auctionId), zap.Int64("sellerId", item.SellerId), zap.Int64("winnerId", item.CurrentWinner))
+	zLog.Info("Auction settled", zap.Int64("auctionId", auctionId), zap.Int64("sellerId", item.SellerId), zap.Int64("winnerId", item.CurrentWinner))
 	return nil
 }
 
 // GetAuctionItem 获取拍卖物品信息
-func (as *Service) GetAuctionItem(auctionId int64) (*AuctionItem, bool) {
+func (as *AuctionService) GetAuctionItem(auctionId int64) (*AuctionItem, bool) {
 	item, exists := as.items.Get(auctionId)
 	if !exists {
 		return nil, false
@@ -305,7 +323,7 @@ func (as *Service) GetAuctionItem(auctionId int64) (*AuctionItem, bool) {
 }
 
 // GetPlayerAuctions 获取玩家的拍卖物品
-func (as *Service) GetPlayerAuctions(playerId int64) ([]*AuctionItem, bool) {
+func (as *AuctionService) GetPlayerAuctions(playerId int64) ([]*AuctionItem, bool) {
 	auctionIdsInterface, exists := as.playerItems.Get(playerId)
 	if !exists {
 		return nil, false
@@ -323,7 +341,7 @@ func (as *Service) GetPlayerAuctions(playerId int64) ([]*AuctionItem, bool) {
 }
 
 // isValidBid 检查竞拍价格是否合法
-func (as *Service) isValidBid(item *AuctionItem, bidPrice int64) bool {
+func (as *AuctionService) isValidBid(item *AuctionItem, bidPrice int64) bool {
 	// 检查竞拍价格是否大于当前价格
 	if bidPrice <= item.CurrentPrice {
 		return false
@@ -334,35 +352,15 @@ func (as *Service) isValidBid(item *AuctionItem, bidPrice int64) bool {
 		return false
 	}
 
-	// 检查竞拍价格是否不低于当前价格加上最小加价
+	// 检查竞拍价格是否大于等于当前价格加上最小加价
 	if bidPrice < item.CurrentPrice+item.BidIncrement {
 		return false
 	}
 
-	// 如果支持一口价，检查竞拍价格是否不超过一口价
-	if (item.AuctionType == AuctionTypeBuy || item.AuctionType == AuctionTypeBoth) && bidPrice > item.BuyoutPrice {
+	// 检查竞拍价格是否大于等于当前价格加上默认最小加价
+	if bidPrice < item.CurrentPrice+as.minBidIncrement {
 		return false
 	}
 
 	return true
-}
-
-// removeFromPendingItems 从待开始列表中移除拍卖
-func (as *Service) removeFromPendingItems(auctionId int64) {
-	for i, id := range as.pendingItems {
-		if id == auctionId {
-			as.pendingItems = append(as.pendingItems[:i], as.pendingItems[i+1:]...)
-			return
-		}
-	}
-}
-
-// removeFromActiveItems 从进行中列表中移除拍卖
-func (as *Service) removeFromActiveItems(auctionId int64) {
-	for i, id := range as.activeItems {
-		if id == auctionId {
-			as.activeItems = append(as.activeItems[:i], as.activeItems[i+1:]...)
-			return
-		}
-	}
 }

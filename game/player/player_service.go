@@ -2,6 +2,7 @@ package player
 
 import (
 	"github.com/pzqf/zEngine/zActor"
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zObject"
 	"github.com/pzqf/zUtil/zMap"
@@ -10,15 +11,13 @@ import (
 
 type PlayerService struct {
 	zObject.BaseObject
-	logger        *zap.Logger
 	players       *zMap.Map // key: int64(playerId), value: *Player
 	playerActors  *zMap.Map // key: int64(playerId), value: *PlayerActor
 	sessionPlayer *zMap.Map // key: int64(sessionId), value: int64(playerId)
 }
 
-func NewPlayerService(logger *zap.Logger) *PlayerService {
+func NewPlayerService() *PlayerService {
 	ps := &PlayerService{
-		logger:        logger,
 		players:       zMap.NewMap(),
 		playerActors:  zMap.NewMap(),
 		sessionPlayer: zMap.NewMap(),
@@ -28,13 +27,13 @@ func NewPlayerService(logger *zap.Logger) *PlayerService {
 }
 
 func (ps *PlayerService) Init() error {
-	ps.logger.Info("Initializing player service...")
+	zLog.Info("Initializing player service...")
 	// 初始化玩家服务相关资源
 	return nil
 }
 
 func (ps *PlayerService) Close() error {
-	ps.logger.Info("Closing player service...")
+	zLog.Info("Closing player service...")
 	// 清理玩家服务相关资源
 	ps.players.Clear()
 
@@ -58,18 +57,18 @@ func (ps *PlayerService) CreatePlayerActor(session *zNet.TcpServerSession, playe
 	}
 
 	// 创建新玩家Actor
-	playerActor := NewPlayerActor(playerId, name, session, ps.logger)
+	playerActor := NewPlayerActor(playerId, name, session)
 
 	// 注册到全局Actor系统
 	// 注意：需要先在zEngine中初始化全局Actor系统
 	// 这里假设已经在其他地方初始化了全局Actor系统实例
 	// actorSystem := actor.NewActorSystem()
 	// if err := actorSystem.Start(); err != nil {
-	//     ps.logger.Error("Failed to start actor system", zap.Error(err))
+	//     zLog.Error("Failed to start actor system", zap.Error(err))
 	//     return nil, err
 	// }
 	// if err := actorSystem.RegisterActor(playerActor); err != nil {
-	//     ps.logger.Error("Failed to register player actor", zap.Int64("playerId", playerId), zap.Error(err))
+	//     zLog.Error("Failed to register player actor", zap.Int64("playerId", playerId), zap.Error(err))
 	//     return nil, err
 	// }
 
@@ -77,7 +76,7 @@ func (ps *PlayerService) CreatePlayerActor(session *zNet.TcpServerSession, playe
 	ps.playerActors.Store(playerId, playerActor)
 	ps.sessionPlayer.Store(int64(session.GetSid()), playerId)
 
-	ps.logger.Info("Created new player actor", zap.Int64("playerId", playerId), zap.String("name", name))
+	zLog.Info("Created new player actor", zap.Int64("playerId", playerId), zap.String("name", name))
 	return playerActor, nil
 }
 
@@ -92,13 +91,13 @@ func (ps *PlayerService) CreatePlayer(session *zNet.TcpServerSession, playerId i
 	}
 
 	// 创建新玩家
-	player := NewPlayer(playerId, name, session, ps.logger)
+	player := NewPlayer(playerId, name, session)
 
 	// 存储玩家信息
 	ps.players.Store(playerId, player)
 	ps.sessionPlayer.Store(int64(session.GetSid()), playerId)
 
-	ps.logger.Info("Created new player", zap.Int64("playerId", playerId), zap.String("name", name))
+	zLog.Info("Created new player", zap.Int64("playerId", playerId), zap.String("name", name))
 	return player, nil
 }
 
@@ -137,7 +136,7 @@ func (ps *PlayerService) RemovePlayer(playerId int64) {
 	if player, exists := ps.players.Get(playerId); exists {
 		ps.sessionPlayer.Delete(int64(player.(*Player).Session.GetSid()))
 		ps.players.Delete(playerId)
-		ps.logger.Info("Removed player", zap.Int64("playerId", playerId))
+		zLog.Info("Removed player", zap.Int64("playerId", playerId))
 		return
 	}
 
@@ -145,13 +144,13 @@ func (ps *PlayerService) RemovePlayer(playerId int64) {
 	if playerActor, exists := ps.playerActors.Get(playerId); exists {
 		// 从全局Actor系统中注销
 		if err := zActor.GetGlobalActorSystem().UnregisterActor(playerId); err != nil {
-			ps.logger.Error("Failed to unregister player actor", zap.Int64("playerId", playerId), zap.Error(err))
+			zLog.Error("Failed to unregister player actor", zap.Int64("playerId", playerId), zap.Error(err))
 		}
 
 		// 更新会话映射
 		ps.sessionPlayer.Delete(int64(playerActor.(*PlayerActor).GetSession().GetSid()))
 		ps.playerActors.Delete(playerId)
-		ps.logger.Info("Removed player actor", zap.Int64("playerId", playerId))
+		zLog.Info("Removed player actor", zap.Int64("playerId", playerId))
 	}
 }
 

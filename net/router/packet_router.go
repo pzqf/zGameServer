@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"go.uber.org/zap"
 )
@@ -13,14 +14,12 @@ type HandlerTable map[int32]HandlerFunc
 
 // PacketRouter 数据包路由器
 type PacketRouter struct {
-	logger   *zap.Logger
 	handlers HandlerTable
 }
 
 // NewPacketRouter 创建一个新的数据包路由器
-func NewPacketRouter(logger *zap.Logger) *PacketRouter {
+func NewPacketRouter() *PacketRouter {
 	return &PacketRouter{
-		logger:   logger,
 		handlers: make(HandlerTable),
 	}
 }
@@ -28,13 +27,13 @@ func NewPacketRouter(logger *zap.Logger) *PacketRouter {
 // RegisterHandler 注册一个消息处理器
 func (pr *PacketRouter) RegisterHandler(cmd int32, handler HandlerFunc) {
 	pr.handlers[cmd] = handler
-	pr.logger.Debug("Registered handler", zap.Int32("cmd", cmd))
+	zLog.Debug("Registered handler", zap.Int32("cmd", cmd))
 }
 
 // UnregisterHandler 注销一个消息处理器
 func (pr *PacketRouter) UnregisterHandler(cmd int32) {
 	delete(pr.handlers, cmd)
-	pr.logger.Debug("Unregistered handler", zap.Int32("cmd", cmd))
+	zLog.Debug("Unregistered handler", zap.Int32("cmd", cmd))
 }
 
 // Route 路由数据包到相应的处理程序
@@ -42,7 +41,7 @@ func (pr *PacketRouter) Route(session *zNet.TcpServerSession, packet *zNet.NetPa
 	// 查找对应的处理函数
 	handler, exists := pr.handlers[packet.ProtoId]
 	if !exists {
-		pr.logger.Warn("No handler found for command", zap.Int32("cmd", packet.ProtoId))
+		zLog.Warn("No handler found for command", zap.Int32("cmd", packet.ProtoId))
 		return nil
 	}
 

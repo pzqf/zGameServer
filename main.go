@@ -79,27 +79,27 @@ func main() {
 	zLog.Info("Starting MMO Game Server...")
 
 	// 创建游戏服务器
-	gameServer := gameserver.NewGameServer(zLog.GetLogger())
+	gameServer := gameserver.NewGameServer()
 
 	// 注册玩家系统服务
-	playerService := player.NewService()
+	playerService := player.NewPlayerService()
 	if err := gameServer.AddService(playerService); err != nil {
 		zLog.Fatal("Failed to add player service", zap.Error(err))
 	}
 
 	// 注册全局系统服务
-	guildService := guild.NewService()
+	guildService := guild.NewGuildService()
 	if err := gameServer.AddService(guildService); err != nil {
 		zLog.Fatal("Failed to add guild service", zap.Error(err))
 	}
 
-	auctionService := auction.NewService()
+	auctionService := auction.NewAuctionService()
 	if err := gameServer.AddService(auctionService); err != nil {
 		zLog.Fatal("Failed to add auction service", zap.Error(err))
 	}
 
 	// 注册地图服务
-	mapService := maps.NewService()
+	mapService := maps.NewMapService()
 	if err := gameServer.AddService(mapService); err != nil {
 		zLog.Fatal("Failed to add map service", zap.Error(err))
 	}

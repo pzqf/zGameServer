@@ -1,12 +1,12 @@
 package player
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zEngine/zEvent"
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zGameServer/event"
+	"go.uber.org/zap"
 )
 
 // PlayerActorMessageType PlayerActor消息类型
@@ -96,12 +96,12 @@ type PlayerActor struct {
 }
 
 // NewPlayerActor 创建玩家Actor
-func NewPlayerActor(playerId int64, name string, session *zNet.TcpServerSession, logger *zap.Logger) *PlayerActor {
+func NewPlayerActor(playerId int64, name string, session *zNet.TcpServerSession) *PlayerActor {
 	// 创建基础Actor
 	baseActor := zActor.NewBaseActor(playerId, 100)
 
 	// 创建Player对象
-	player := NewPlayer(playerId, name, session, logger)
+	player := NewPlayer(playerId, name, session)
 
 	// 创建并返回PlayerActor
 	playerActor := &PlayerActor{
@@ -135,7 +135,7 @@ func (pa *PlayerActor) ProcessMessage(msg zActor.ActorMessage) {
 	case *PlayerActorClaimMailMessage:
 		pa.handleClaimMailMessage(msg)
 	default:
-		pa.logger.Warn("Unknown message type", zap.Any("message", msg))
+		zLog.Warn("Unknown message type", zap.Any("message", msg))
 	}
 }
 
@@ -143,7 +143,7 @@ func (pa *PlayerActor) ProcessMessage(msg zActor.ActorMessage) {
 func (pa *PlayerActor) handleConnectMessage(msg *PlayerActorConnectMessage) {
 	pa.status = PlayerStatusOnline
 	pa.Session = msg.Session
-	pa.logger.Info("Player connected (Actor)", zap.Int64("playerId", pa.playerId), zap.String("name", pa.name))
+	zLog.Info("Player connected (Actor)", zap.Int64("playerId", pa.playerId), zap.String("name", pa.name))
 
 	// 发布玩家登录事件
 	pa.publishEvent(event.EventPlayerLogin, nil)
@@ -153,7 +153,7 @@ func (pa *PlayerActor) handleConnectMessage(msg *PlayerActorConnectMessage) {
 func (pa *PlayerActor) handleDisconnectMessage(msg *PlayerActorDisconnectMessage) {
 	pa.status = PlayerStatusOffline
 	pa.Session = nil
-	pa.logger.Info("Player disconnected (Actor)", zap.Int64("playerId", pa.playerId), zap.String("name", pa.name))
+	zLog.Info("Player disconnected (Actor)", zap.Int64("playerId", pa.playerId), zap.String("name", pa.name))
 
 	// 发布玩家登出事件
 	pa.publishEvent(event.EventPlayerLogout, nil)
@@ -175,7 +175,7 @@ func (pa *PlayerActor) handleAddExpMessage(msg *PlayerActorAddExpMessage) {
 	newExp := oldExp + msg.Exp
 	basicInfo.Exp.Store(newExp)
 
-	pa.logger.Debug("Player exp increased", zap.Int64("playerId", pa.playerId), zap.Int64("oldExp", oldExp), zap.Int64("newExp", newExp))
+	zLog.Debug("Player exp increased", zap.Int64("playerId", pa.playerId), zap.Int64("oldExp", oldExp), zap.Int64("newExp", newExp))
 
 	// 检查是否升级
 	// TODO: 实现升级逻辑
@@ -203,7 +203,7 @@ func (pa *PlayerActor) handleAddGoldMessage(msg *PlayerActorAddGoldMessage) {
 	newGold := oldGold + msg.Gold
 	basicInfo.Gold.Store(newGold)
 
-	pa.logger.Debug("Player gold increased", zap.Int64("playerId", pa.playerId), zap.Int64("oldGold", oldGold), zap.Int64("newGold", newGold))
+	zLog.Debug("Player gold increased", zap.Int64("playerId", pa.playerId), zap.Int64("oldGold", oldGold), zap.Int64("newGold", newGold))
 
 	// 发布金币变化事件
 	pa.publishEvent(event.EventPlayerGoldAdd, &event.PlayerGoldEventData{
