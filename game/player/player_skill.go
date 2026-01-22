@@ -3,6 +3,7 @@ package player
 import (
 	"time"
 
+	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -65,6 +66,7 @@ type Skill struct {
 
 // SkillManager 技能管理系统
 type SkillManager struct {
+	*component.BaseComponent
 	playerId int64
 	logger   *zap.Logger
 	skills   *zMap.Map // key: int64(skillId), value: *Skill
@@ -73,18 +75,27 @@ type SkillManager struct {
 
 func NewSkillManager(playerId int64, logger *zap.Logger) *SkillManager {
 	return &SkillManager{
-		playerId: playerId,
-		logger:   logger,
-		skills:   zMap.NewMap(),
-		maxCount: 50, // 最大技能数量
+		BaseComponent: component.NewBaseComponent("skills"),
+		playerId:      playerId,
+		logger:        logger,
+		skills:        zMap.NewMap(),
+		maxCount:      50, // 最大技能数量
 	}
 }
 
-func (sm *SkillManager) Init() {
+func (sm *SkillManager) Init() error {
 	// 初始化技能管理系统
 	sm.logger.Debug("Initializing skill manager", zap.Int64("playerId", sm.playerId))
 	// 为新玩家初始化基础技能
 	sm.initBasicSkills()
+	return nil
+}
+
+// Destroy 销毁技能管理组件
+func (sm *SkillManager) Destroy() {
+	// 清理技能管理资源
+	sm.logger.Debug("Destroying skill manager", zap.Int64("playerId", sm.playerId))
+	sm.skills.Clear()
 }
 
 // initBasicSkills 初始化基础技能

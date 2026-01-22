@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pzqf/zGameServer/game/component/property"
+	"github.com/pzqf/zGameServer/game/systems/property"
 )
 
 // CombatState 战斗状态

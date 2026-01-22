@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zGameServer/config/tables"
-	"github.com/pzqf/zGameServer/game/component/property"
+	"github.com/pzqf/zGameServer/game/systems/property"
 )
 
 // Skill 技能数据结构

@@ -11,6 +11,7 @@ import (
 	"github.com/pzqf/zUtil/zTime"
 
 	"github.com/pzqf/zGameServer/game/object"
+	"github.com/pzqf/zGameServer/game/object/component"
 )
 
 // 玩家状态定义
@@ -21,7 +22,6 @@ const (
 )
 
 // Player 玩家对象
-
 type Player struct {
 	object.LivingObject
 	playerId int64
@@ -29,18 +29,11 @@ type Player struct {
 	Session  *zNet.TcpServerSession
 	logger   *zap.Logger
 	status   int
-	// 玩家系统组件
-	basicInfo *BasicInfo
-	inventory *Inventory
-	equipment *Equipment
-	mailbox   *Mailbox
-	tasks     *TaskManager
-	skills    *SkillManager
 }
 
 // BasicInfo 玩家基础信息
-
 type BasicInfo struct {
+	*component.BaseComponent
 	Level      int
 	Exp        atomic.Int64
 	Gold       atomic.Int64
@@ -49,38 +42,71 @@ type BasicInfo struct {
 	CreateTime int64
 }
 
+// Destroy 销毁基础信息组件
+func (bi *BasicInfo) Destroy() {
+	// 清理基础信息资源
+	// 这里不需要特别清理，因为没有需要释放的资源
+}
+
 func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession, logger *zap.Logger) *Player {
+	// 创建基础生命对象
+	livingObj := object.NewLivingObject(uint64(playerId), name)
+
+	// 创建玩家对象
 	player := &Player{
-		playerId: playerId,
-		name:     name,
-		Session:  session,
-		logger:   logger,
-		status:   PlayerStatusOnline,
-		basicInfo: &BasicInfo{
-			Level:      1,
-			VipLevel:   0,
-			ServerId:   1,
-			CreateTime: zTime.Now().Time().UnixMilli(), // 设置为当前时间
-		},
-		inventory: NewInventory(playerId, logger),
-		equipment: NewEquipment(playerId, logger),
-		mailbox:   NewMailbox(playerId, logger),
-		tasks:     NewTaskManager(playerId, logger),
-		skills:    NewSkillManager(playerId, logger),
+		LivingObject: *livingObj,
+		playerId:     playerId,
+		name:         name,
+		Session:      session,
+		logger:       logger,
+		status:       PlayerStatusOnline,
 	}
 
-	// 初始化原子字段
-	player.basicInfo.Exp.Store(0)
-	player.basicInfo.Gold.Store(1000)
-
-	// 初始化玩家系统组件
-	player.inventory.Init()
-	player.equipment.Init()
-	player.mailbox.Init()
-	player.tasks.Init()
-	player.skills.Init()
+	// 创建并添加玩家系统组件
+	player.addComponents()
 
 	return player
+}
+
+// addComponents 添加玩家系统组件
+func (p *Player) addComponents() {
+	// 基础信息组件
+	basicInfo := &BasicInfo{
+		BaseComponent: component.NewBaseComponent("basicInfo"),
+		Level:         1,
+		VipLevel:      0,
+		ServerId:      1,
+		CreateTime:    zTime.Now().Time().UnixMilli(), // 设置为当前时间
+	}
+	// 初始化原子字段
+	basicInfo.Exp.Store(0)
+	basicInfo.Gold.Store(1000)
+	p.AddComponent(basicInfo)
+
+	// 背包组件
+	inventory := NewInventory(p.playerId, p.logger)
+	inventory.Init()
+	p.AddComponent(inventory)
+
+	// 装备组件
+	equipment := NewEquipment(p.playerId, p.logger)
+	equipment.Init()
+	p.AddComponent(equipment)
+
+	// 邮箱组件
+	mailbox := NewMailbox(p.playerId, p.logger)
+	mailbox.Init()
+	p.AddComponent(mailbox)
+
+	// 任务组件
+	tasks := NewTaskManager(p.playerId, p.logger)
+	tasks.Init()
+	p.AddComponent(tasks)
+
+	// 技能组件
+	skills := NewSkillManager(p.playerId, p.logger)
+	skills.Init()
+	p.AddComponent(skills)
 }
 
 // GetPlayerId 获取玩家ID
@@ -108,34 +134,63 @@ func (p *Player) SetStatus(status int) {
 	p.status = status
 }
 
+// GetType 获取玩家类型
+func (p *Player) GetType() int {
+	return object.GameObjectTypePlayer
+}
+
 // GetBasicInfo 获取玩家基础信息
 func (p *Player) GetBasicInfo() *BasicInfo {
-	return p.basicInfo
+	component := p.GetComponent("basicInfo")
+	if component != nil {
+		return component.(*BasicInfo)
+	}
+	return nil
 }
 
 // GetInventory 获取玩家背包
 func (p *Player) GetInventory() *Inventory {
-	return p.inventory
+	component := p.GetComponent("inventory")
+	if component != nil {
+		return component.(*Inventory)
+	}
+	return nil
 }
 
 // GetEquipment 获取玩家装备
 func (p *Player) GetEquipment() *Equipment {
-	return p.equipment
+	component := p.GetComponent("equipment")
+	if component != nil {
+		return component.(*Equipment)
+	}
+	return nil
 }
 
 // GetMailbox 获取玩家邮箱
 func (p *Player) GetMailbox() *Mailbox {
-	return p.mailbox
+	component := p.GetComponent("mailbox")
+	if component != nil {
+		return component.(*Mailbox)
+	}
+	return nil
 }
 
 // GetTasks 获取玩家任务
 func (p *Player) GetTasks() *TaskManager {
-	return p.tasks
+	component := p.GetComponent("tasks")
+	if component != nil {
+		return component.(*TaskManager)
+	}
+	return nil
 }
 
 // GetSkills 获取玩家技能
 func (p *Player) GetSkills() *SkillManager {
-	return p.skills
+	component := p.GetComponent("skills")
+	if component != nil {
+		return component.(*SkillManager)
+	}
+	return nil
 }
 
 // OnConnect 玩家连接成功
@@ -167,7 +222,12 @@ func (p *Player) publishEvent(eventType zEvent.EventType, data interface{}) {
 
 // AddExp 增加玩家经验并发布事件
 func (p *Player) AddExp(exp int64) {
-	p.basicInfo.Exp.Add(exp)
+	basicInfo := p.GetBasicInfo()
+	if basicInfo == nil {
+		return
+	}
+
+	basicInfo.Exp.Add(exp)
 
 	// 发布经验增加事件
 	eventData := &event.PlayerExpEventData{
@@ -190,7 +250,12 @@ func (p *Player) AddExp(exp int64) {
 
 // AddGold 增加玩家金币并发布事件
 func (p *Player) AddGold(gold int64) {
-	p.basicInfo.Gold.Add(gold)
+	basicInfo := p.GetBasicInfo()
+	if basicInfo == nil {
+		return
+	}
+
+	basicInfo.Gold.Add(gold)
 
 	// 发布金币增加事件
 	eventData := &event.PlayerGoldEventData{
@@ -202,12 +267,17 @@ func (p *Player) AddGold(gold int64) {
 
 // SubGold 减少玩家金币并发布事件
 func (p *Player) SubGold(gold int64) bool {
+	basicInfo := p.GetBasicInfo()
+	if basicInfo == nil {
+		return false
+	}
+
 	for {
-		currentGold := p.basicInfo.Gold.Load()
+		currentGold := basicInfo.Gold.Load()
 		if currentGold < gold {
 			return false // 金币不足
 		}
-		if p.basicInfo.Gold.CompareAndSwap(currentGold, currentGold-gold) {
+		if basicInfo.Gold.CompareAndSwap(currentGold, currentGold-gold) {
 			// 发布金币减少事件
 			eventData := &event.PlayerGoldEventData{
 				PlayerID: p.playerId,

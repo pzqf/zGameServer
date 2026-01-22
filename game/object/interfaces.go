@@ -1,28 +1,26 @@
 package object
 
-import "github.com/pzqf/zEngine/zEvent"
+import "github.com/pzqf/zGameServer/game/common"
 
-// IGameObject 所有游戏对象的最基本行为接口
-type IGameObject interface {
-	// 获取唯一标识
-	GetID() uint64
-	// 获取名称
-	GetName() string
-	// 获取位置信息
-	GetPosition() Vector3
-	// 设置位置
-	SetPosition(pos Vector3)
-	// 更新逻辑
-	Update(deltaTime float64)
-	// 销毁对象
-	Destroy()
-	// 检查是否存活
-	IsActive() bool
-	// 设置是否激活
-	SetActive(active bool)
-	// 获取事件总线
-	GetEventEmitter() *zEvent.EventBus
-}
+// 游戏对象类型定义
+const (
+	// GameObjectTypeBasic 基础游戏对象
+	GameObjectTypeBasic = 1
+	// GameObjectTypeLiving 生命对象
+	GameObjectTypeLiving = 2
+	// GameObjectTypePlayer 玩家
+	GameObjectTypePlayer = 3
+	// GameObjectTypeNPC NPC
+	GameObjectTypeNPC = 4
+	// GameObjectTypeMonster 怪物
+	GameObjectTypeMonster = 5
+	// GameObjectTypePet 宠物
+	GameObjectTypePet = 6
+	// GameObjectTypeItem 物品
+	GameObjectTypeItem = 7
+	// GameObjectTypeBuilding 建筑
+	GameObjectTypeBuilding = 8
+)
 
 // IDrawable 可绘制接口
 type IDrawable interface {
@@ -37,7 +35,7 @@ type IDrawable interface {
 // IMovable 可移动接口
 type IMovable interface {
 	// 移动到目标位置
-	MoveTo(target Vector3, speed float32)
+	MoveTo(target common.Vector3, speed float32)
 	// 停止移动
 	StopMoving()
 	// 获取移动速度
@@ -47,13 +45,13 @@ type IMovable interface {
 	// 检查是否正在移动
 	IsMoving() bool
 	// 获取移动方向
-	GetDirection() Vector3
+	GetDirection() common.Vector3
 }
 
 // IInteractable 可交互接口
 type IInteractable interface {
 	// 与其他对象交互
-	Interact(interactor IGameObject)
+	Interact(interactor common.IGameObject)
 	// 检查是否可交互
 	IsInteractable() bool
 	// 设置交互距离
@@ -64,7 +62,7 @@ type IInteractable interface {
 
 // ILivingObject 生命对象接口
 type ILivingObject interface {
-	IGameObject
+	common.IGameObject
 	// 获取生命值
 	GetHealth() float32
 	// 设置生命值
@@ -74,11 +72,11 @@ type ILivingObject interface {
 	// 设置最大生命值
 	SetMaxHealth(maxHealth float32)
 	// 受到伤害
-	TakeDamage(damage float32, attacker IGameObject)
+	TakeDamage(damage float32, attacker common.IGameObject)
 	// 回复生命值
 	Heal(amount float32)
 	// 死亡处理
-	Die(killer IGameObject)
+	Die(killer common.IGameObject)
 	// 检查是否存活
 	IsAlive() bool
 }
@@ -128,7 +126,7 @@ type ISkillUser interface {
 	// 学习技能
 	LearnSkill(skillID int32)
 	// 使用技能
-	UseSkill(skillID int32, target IGameObject)
+	UseSkill(skillID int32, target common.IGameObject)
 	// 升级技能
 	UpgradeSkill(skillID int32)
 	// 检查是否可以使用技能

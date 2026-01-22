@@ -4,8 +4,10 @@ import (
 	"sync"
 
 	"github.com/pzqf/zEngine/zEvent"
-	"github.com/pzqf/zGameServer/game/component/combat"
-	"github.com/pzqf/zGameServer/game/component/property"
+	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/game/object/component"
+	"github.com/pzqf/zGameServer/game/systems/combat"
+	"github.com/pzqf/zGameServer/game/systems/property"
 )
 
 // GameObject 基础游戏对象类
@@ -13,22 +15,39 @@ type GameObject struct {
 	mu           sync.RWMutex
 	id           uint64
 	name         string
-	position     Vector3
+	objectType   int
+	position     common.Vector3
 	isActive     bool
 	eventEmitter *zEvent.EventBus
-	components   map[string]interface{}
+	components   *component.ComponentManager
 }
 
 // NewGameObject 创建新的游戏对象
 func NewGameObject(id uint64, name string) *GameObject {
-	return &GameObject{
+	goObj := &GameObject{
 		id:           id,
 		name:         name,
-		position:     Vector3{0, 0, 0},
+		objectType:   GameObjectTypeBasic,
+		position:     common.NewVector3(0, 0, 0),
 		isActive:     true,
 		eventEmitter: zEvent.GetGlobalEventBus(),
-		components:   make(map[string]interface{}),
 	}
+	goObj.components = component.NewComponentManager(goObj)
+	return goObj
+}
+
+// NewGameObjectWithType 创建指定类型的游戏对象
+func NewGameObjectWithType(id uint64, name string, objectType int) *GameObject {
+	goObj := &GameObject{
+		id:           id,
+		name:         name,
+		objectType:   objectType,
+		position:     common.NewVector3(0, 0, 0),
+		isActive:     true,
+		eventEmitter: zEvent.GetGlobalEventBus(),
+	}
+	goObj.components = component.NewComponentManager(goObj)
+	return goObj
 }
 
 // GetID 获取唯一标识
@@ -41,15 +60,29 @@ func (goObj *GameObject) GetName() string {
 	return goObj.name
 }
 
+// GetType 获取对象类型
+func (goObj *GameObject) GetType() int {
+	goObj.mu.RLock()
+	defer goObj.mu.RUnlock()
+	return goObj.objectType
+}
+
+// SetType 设置对象类型
+func (goObj *GameObject) SetType(objectType int) {
+	goObj.mu.Lock()
+	defer goObj.mu.Unlock()
+	goObj.objectType = objectType
+}
+
 // GetPosition 获取位置信息
-func (goObj *GameObject) GetPosition() Vector3 {
+func (goObj *GameObject) GetPosition() common.Vector3 {
 	goObj.mu.RLock()
 	defer goObj.mu.RUnlock()
 	return goObj.position
 }
 
 // SetPosition 设置位置
-func (goObj *GameObject) SetPosition(pos Vector3) {
+func (goObj *GameObject) SetPosition(pos common.Vector3) {
 	goObj.mu.Lock()
 	defer goObj.mu.Unlock()
 	goObj.position = pos
@@ -59,6 +92,9 @@ func (goObj *GameObject) SetPosition(pos Vector3) {
 func (goObj *GameObject) Update(deltaTime float64) {
 	// 基础游戏对象更新逻辑
 	// 移动、战斗等功能由独立系统处理
+
+	// 更新所有组件
+	goObj.components.Update(deltaTime)
 }
 
 // Destroy 销毁对象
@@ -66,7 +102,10 @@ func (goObj *GameObject) Destroy() {
 	goObj.mu.Lock()
 	defer goObj.mu.Unlock()
 	goObj.isActive = false
-	// TODO: 释放资源
+
+	// 销毁所有组件
+	goObj.components.Destroy()
+	// TODO: 释放其他资源
 }
 
 // IsActive 检查是否存活
@@ -89,24 +128,35 @@ func (goObj *GameObject) GetEventEmitter() *zEvent.EventBus {
 }
 
 // AddComponent 添加组件
-func (goObj *GameObject) AddComponent(name string, component interface{}) {
-	goObj.mu.Lock()
-	defer goObj.mu.Unlock()
-	goObj.components[name] = component
+func (goObj *GameObject) AddComponent(component common.IComponent) {
+	// 直接添加组件到管理器
+	goObj.components.AddComponent(component)
+}
+
+// AddComponentWithName 添加带有名称的组件（兼容旧接口）
+func (goObj *GameObject) AddComponentWithName(name string, component common.IComponent) {
+	// 直接添加组件到管理器
+	goObj.components.AddComponent(component)
 }
 
 // GetComponent 获取组件
-func (goObj *GameObject) GetComponent(name string) interface{} {
-	goObj.mu.RLock()
-	defer goObj.mu.RUnlock()
-	return goObj.components[name]
+func (goObj *GameObject) GetComponent(componentID string) common.IComponent {
+	return goObj.components.GetComponent(componentID)
 }
 
 // RemoveComponent 移除组件
-func (goObj *GameObject) RemoveComponent(name string) {
-	goObj.mu.Lock()
-	defer goObj.mu.Unlock()
-	delete(goObj.components, name)
+func (goObj *GameObject) RemoveComponent(componentID string) {
+	goObj.components.RemoveComponent(componentID)
+}
+
+// HasComponent 检查是否存在指定组件
+func (goObj *GameObject) HasComponent(componentID string) bool {
+	return goObj.components.HasComponent(componentID)
+}
+
+// GetAllComponents 获取所有组件
+func (goObj *GameObject) GetAllComponents() []common.IComponent {
+	return goObj.components.GetAllComponents()
 }
 
 // LivingObject 生命对象类
@@ -173,8 +223,13 @@ func (lo *LivingObject) SetMaxHealth(maxHealth float32) {
 	}
 }
 
+// GetType 获取对象类型
+func (lo *LivingObject) GetType() int {
+	return GameObjectTypeLiving
+}
+
 // TakeDamage 受到伤害
-func (lo *LivingObject) TakeDamage(damage float32, attacker IGameObject) {
+func (lo *LivingObject) TakeDamage(damage float32, attacker common.IGameObject) {
 	// 使用战斗系统计算最终伤害
 	finalDamage := combat.GlobalCombatSystem.CalculateDamage(attacker.GetID(), lo.GetID())
 
@@ -199,7 +254,7 @@ func (lo *LivingObject) Heal(amount float32) {
 }
 
 // Die 死亡处理
-func (lo *LivingObject) Die(killer IGameObject) {
+func (lo *LivingObject) Die(killer common.IGameObject) {
 	lo.SetActive(false)
 
 	// TODO: 实现事件触发

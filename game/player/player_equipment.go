@@ -3,6 +3,7 @@ package player
 import (
 	"go.uber.org/zap"
 
+	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 )
 
@@ -22,6 +23,7 @@ const (
 
 // Equipment 装备系统
 type Equipment struct {
+	*component.BaseComponent
 	playerId   int64
 	logger     *zap.Logger
 	equipments *zMap.Map // key: int(equipPos), value: *Item
@@ -29,15 +31,24 @@ type Equipment struct {
 
 func NewEquipment(playerId int64, logger *zap.Logger) *Equipment {
 	return &Equipment{
-		playerId:   playerId,
-		logger:     logger,
-		equipments: zMap.NewMap(),
+		BaseComponent: component.NewBaseComponent("equipment"),
+		playerId:      playerId,
+		logger:        logger,
+		equipments:    zMap.NewMap(),
 	}
 }
 
-func (eq *Equipment) Init() {
+func (eq *Equipment) Init() error {
 	// 初始化装备系统
 	eq.logger.Debug("Initializing equipment", zap.Int64("playerId", eq.playerId))
+	return nil
+}
+
+// Destroy 销毁装备组件
+func (eq *Equipment) Destroy() {
+	// 清理装备资源
+	eq.logger.Debug("Destroying equipment", zap.Int64("playerId", eq.playerId))
+	eq.equipments.Clear()
 }
 
 // Equip 装备物品

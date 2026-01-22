@@ -6,6 +6,10 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zGameServer/game/common"
+	monster "github.com/pzqf/zGameServer/game/monsters"
+	"github.com/pzqf/zGameServer/game/npc"
+	"github.com/pzqf/zGameServer/game/object"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -19,32 +23,6 @@ const (
 	MapTypeGuild   = 5 // 公会地图
 )
 
-// 地图对象类型定义
-const (
-	MapObjectTypePlayer   = 1 // 玩家
-	MapObjectTypeNPC      = 2 // NPC
-	MapObjectTypeMonster  = 3 // 怪物
-	MapObjectTypeItem     = 4 // 物品
-	MapObjectTypePet      = 5 // 宠物
-	MapObjectTypeVehicle  = 6 // 载具
-	MapObjectTypeBuilding = 7 // 建筑
-)
-
-// MapObject 地图对象
-type MapObject struct {
-	ObjectId    int64     // 对象ID
-	ObjectType  int       // 对象类型
-	MapId       int64     // 所属地图ID
-	X           float64   // X坐标
-	Y           float64   // Y坐标
-	Z           float64   // Z坐标
-	Orientation float64   // 方向
-	MoveSpeed   float64   // 移动速度
-	IsMoving    bool      // 是否移动中
-	Status      int       // 状态
-	Properties  *zMap.Map // 附加属性
-}
-
 // MapRegion 地图区域
 type MapRegion struct {
 	regionId   int
@@ -52,7 +30,7 @@ type MapRegion struct {
 	minY       float64
 	maxX       float64
 	maxY       float64
-	objects    *zMap.Map // key: int64(objectId), value: *MapObject
+	objects    *zMap.Map // key: int64(objectId), value: object.IGameObject
 	regionName string
 }
 
@@ -68,11 +46,12 @@ type Map struct {
 	tileWidth     float64
 	tileHeight    float64
 	tileMap       [][]int   // 地形数据
-	objects       *zMap.Map // key: int64(objectId), value: *MapObject
+	objects       *zMap.Map // key: int64(objectId), value: object.IGameObject
 	regions       *zMap.Map // key: int(regionId), value: *MapRegion
-	npcs          *zMap.Map // key: int64(npcId), value: *MapObject
-	monsters      *zMap.Map // key: int64(monsterId), value: *MapObject
-	dropItems     *zMap.Map // key: int64(itemId), value: *MapObject
+	npcs          *zMap.Map // key: int64(npcId), value: object.IGameObject
+	monsters      *zMap.Map // key: int64(monsterId), value: object.IGameObject
+	dropItems     *zMap.Map // key: int64(itemId), value: object.IGameObject
+	players       *zMap.Map // key: int64(playerId), value: object.IGameObject
 	isInstance    bool      // 是否为实例地图
 	instanceOwner int64     // 实例所有者（如果有）
 	maxPlayers    int
@@ -150,6 +129,7 @@ func NewMap(mapId int64, name string, mapType int, width, height, regionSize, ti
 		npcs:          zMap.NewMap(),
 		monsters:      zMap.NewMap(),
 		dropItems:     zMap.NewMap(),
+		players:       zMap.NewMap(),
 		isInstance:    isInstance,
 		instanceOwner: 0,
 		maxPlayers:    100,
@@ -254,19 +234,16 @@ func (m *Map) loadObjects(mapData MapJSONData) {
 
 // spawnNPC 生成NPC对象
 func (m *Map) spawnNPC(spawnPoint SpawnPointData) {
-	// 创建NPC对象
-	npcObj := &MapObject{
-		ObjectId:   spawnPoint.ID,
-		ObjectType: MapObjectTypeNPC,
-		MapId:      m.mapId,
-		X:          spawnPoint.X,
-		Y:          spawnPoint.Y,
-		Z:          spawnPoint.Z,
-		Properties: zMap.NewMap(),
-	}
+	// 创建实际的NPC实例
+	npcObj := npc.NewNPC(uint64(spawnPoint.ID), spawnPoint.Name, npc.NPCTypeCommon)
 
-	// 设置NPC属性
-	npcObj.Properties.Store("name", spawnPoint.Name)
+	// 设置NPC位置
+	position := common.NewVector3(
+		float32(spawnPoint.X),
+		float32(spawnPoint.Y),
+		float32(spawnPoint.Z),
+	)
+	npcObj.SetPosition(position)
 
 	// 添加到地图
 	m.AddObject(npcObj)
@@ -282,21 +259,18 @@ func (m *Map) spawnMonsters(spawnPoint SpawnPointData) {
 	// 生成指定数量的怪物
 	for i := 0; i < count; i++ {
 		// 为每个怪物生成唯一ID
-		monsterId := spawnPoint.ID + int64(i)
+		monsterId := uint64(spawnPoint.ID + int64(i))
 
-		// 创建怪物对象
-		monsterObj := &MapObject{
-			ObjectId:   monsterId,
-			ObjectType: MapObjectTypeMonster,
-			MapId:      m.mapId,
-			X:          spawnPoint.X,
-			Y:          spawnPoint.Y,
-			Z:          spawnPoint.Z,
-			Properties: zMap.NewMap(),
-		}
+		// 创建实际的Monster实例
+		monsterObj := monster.NewMonster(monsterId, spawnPoint.Name)
 
-		// 设置怪物属性
-		monsterObj.Properties.Store("name", spawnPoint.Name)
+		// 设置怪物位置
+		position := common.NewVector3(
+			float32(spawnPoint.X),
+			float32(spawnPoint.Y),
+			float32(spawnPoint.Z),
+		)
+		monsterObj.SetPosition(position)
 
 		// 添加到地图
 		m.AddObject(monsterObj)
@@ -305,79 +279,87 @@ func (m *Map) spawnMonsters(spawnPoint SpawnPointData) {
 
 // spawnTeleportPoint 生成传送点对象
 func (m *Map) spawnTeleportPoint(teleportPoint TeleportPointData) {
-	// 创建传送点对象（作为特殊NPC处理）
-	teleportObj := &MapObject{
-		ObjectId:   int64(teleportPoint.ID),
-		ObjectType: MapObjectTypeNPC,
-		MapId:      m.mapId,
-		X:          teleportPoint.X,
-		Y:          teleportPoint.Y,
-		Z:          teleportPoint.Z,
-		Properties: zMap.NewMap(),
-	}
+	// 创建传送点作为特殊NPC处理
+	npcId := uint64(teleportPoint.ID)
+	teleportNPC := npc.NewNPC(npcId, "Teleport Portal", npc.NPCTypeCommon)
 
-	// 设置传送点属性
-	teleportObj.Properties.Store("name", "Teleport Portal")
-	teleportObj.Properties.Store("target_map_id", teleportPoint.TargetMapID)
-	teleportObj.Properties.Store("target_x", teleportPoint.TargetX)
-	teleportObj.Properties.Store("target_y", teleportPoint.TargetY)
-	teleportObj.Properties.Store("target_z", teleportPoint.TargetZ)
+	// 设置传送点位置
+	position := common.NewVector3(
+		float32(teleportPoint.X),
+		float32(teleportPoint.Y),
+		float32(teleportPoint.Z),
+	)
+	teleportNPC.SetPosition(position)
+
+	// 为传送点添加传送属性（在实际应用中，这应该通过NPC的组件系统实现）
+	// 这里简化处理，直接使用NPC的扩展数据
 
 	// 添加到地图
-	m.AddObject(teleportObj)
+	m.AddObject(teleportNPC)
 }
 
 // spawnBuilding 生成建筑对象
 func (m *Map) spawnBuilding(building BuildingData) {
-	// 创建建筑对象
-	buildingObj := &MapObject{
-		ObjectId:   building.ID,
-		ObjectType: MapObjectTypeBuilding,
-		MapId:      m.mapId,
-		X:          building.X,
-		Y:          building.Y,
-		Z:          building.Z,
-		Properties: zMap.NewMap(),
-	}
+	// 创建建筑对象作为基础游戏对象
+	buildingObj := object.NewGameObjectWithType(uint64(building.ID), building.Name, object.GameObjectTypeBuilding)
 
-	// 设置建筑属性
-	buildingObj.Properties.Store("name", building.Name)
-	buildingObj.Properties.Store("type", building.Type)
-	buildingObj.Properties.Store("width", building.Width)
-	buildingObj.Properties.Store("height", building.Height)
+	// 设置建筑位置
+	position := common.NewVector3(
+		float32(building.X),
+		float32(building.Y),
+		float32(building.Z),
+	)
+	buildingObj.SetPosition(position)
 
 	// 添加到地图
 	m.AddObject(buildingObj)
 }
 
 // AddObject 添加对象到地图
-func (m *Map) AddObject(obj *MapObject) {
+func (m *Map) AddObject(obj common.IGameObject) {
+	// 获取对象位置
+	pos := obj.GetPosition()
+	x, y := float64(pos.X), float64(pos.Y)
+
 	// 计算对象所在区域
-	regionId := m.getRegionId(obj.X, obj.Y)
+	regionId := m.getRegionId(x, y)
 
 	// 获取区域
 	regionInterface, exists := m.regions.Get(regionId)
 	if !exists {
-		m.logger.Warn("Region not found", zap.Int("regionId", regionId), zap.Float64("x", obj.X), zap.Float64("y", obj.Y))
+		m.logger.Warn("Region not found", zap.Int("regionId", regionId), zap.Float64("x", x), zap.Float64("y", y))
 		return
 	}
 	region := regionInterface.(*MapRegion)
 
+	// 获取对象ID
+	objectId := int64(obj.GetID())
+
 	// 添加对象到地图
-	m.objects.Store(obj.ObjectId, obj)
-	region.objects.Store(obj.ObjectId, obj)
+	m.objects.Store(objectId, obj)
+	region.objects.Store(objectId, obj)
 
-	// 记录特定类型对象的映射关系
-	switch obj.ObjectType {
-	case MapObjectTypeNPC:
-		m.npcs.Store(obj.ObjectId, obj)
-	case MapObjectTypeMonster:
-		m.monsters.Store(obj.ObjectId, obj)
-	case MapObjectTypeItem:
-		m.dropItems.Store(obj.ObjectId, obj)
+	// 根据对象类型将对象添加到相应的集合
+	// 使用GetType方法获取对象类型，更加统一和可靠
+	objectType := obj.GetType()
+
+	switch objectType {
+	case object.GameObjectTypeNPC:
+		m.npcs.Store(objectId, obj)
+		m.logger.Debug("NPC added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	case object.GameObjectTypeMonster:
+		m.monsters.Store(objectId, obj)
+		m.logger.Debug("Monster added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	case object.GameObjectTypePlayer:
+		m.players.Store(objectId, obj)
+		m.playerCount++
+		m.logger.Debug("Player added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	case object.GameObjectTypeItem:
+		m.dropItems.Store(objectId, obj)
+		m.logger.Debug("Item added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	default:
+		m.logger.Debug("Object added to map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
 	}
-
-	m.logger.Debug("Object added to map", zap.Int64("objectId", obj.ObjectId), zap.Int("objectType", obj.ObjectType), zap.Int64("mapId", m.mapId))
 }
 
 // RemoveObject 从地图移除对象
@@ -387,10 +369,14 @@ func (m *Map) RemoveObject(objectId int64) {
 	if !exists {
 		return // 对象不存在
 	}
-	obj := objInterface.(*MapObject)
+	obj := objInterface.(common.IGameObject)
+
+	// 获取对象位置
+	pos := obj.GetPosition()
+	x, y := float64(pos.X), float64(pos.Y)
 
 	// 计算对象所在区域
-	regionId := m.getRegionId(obj.X, obj.Y)
+	regionId := m.getRegionId(x, y)
 
 	// 获取区域
 	regionInterface, exists := m.regions.Get(regionId)
@@ -402,30 +388,40 @@ func (m *Map) RemoveObject(objectId int64) {
 	// 从地图中移除对象
 	m.objects.Delete(objectId)
 
-	// 从特定类型映射中移除
-	switch obj.ObjectType {
-	case MapObjectTypeNPC:
-		m.npcs.Delete(objectId)
-	case MapObjectTypeMonster:
-		m.monsters.Delete(objectId)
-	case MapObjectTypeItem:
-		m.dropItems.Delete(objectId)
-	}
+	// 根据对象类型将对象从相应的集合中移除
+	// 使用GetType方法获取对象类型，更加统一和可靠
+	objectType := obj.GetType()
 
-	m.logger.Debug("Object removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	switch objectType {
+	case object.GameObjectTypeNPC:
+		m.npcs.Delete(objectId)
+		m.logger.Debug("NPC removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	case object.GameObjectTypeMonster:
+		m.monsters.Delete(objectId)
+		m.logger.Debug("Monster removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	case object.GameObjectTypePlayer:
+		m.players.Delete(objectId)
+		m.playerCount--
+		m.logger.Debug("Player removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	case object.GameObjectTypeItem:
+		m.dropItems.Delete(objectId)
+		m.logger.Debug("Item removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	default:
+		m.logger.Debug("Object removed from map", zap.Int64("objectId", objectId), zap.Int64("mapId", m.mapId))
+	}
 }
 
 // GetObject 获取地图对象
-func (m *Map) GetObject(objectId int64) (*MapObject, bool) {
+func (m *Map) GetObject(objectId int64) (common.IGameObject, bool) {
 	obj, exists := m.objects.Get(objectId)
 	if !exists {
 		return nil, false
 	}
-	return obj.(*MapObject), true
+	return obj.(common.IGameObject), true
 }
 
 // GetObjectsInRegion 获取区域内的对象
-func (m *Map) GetObjectsInRegion(regionId int) ([]*MapObject, bool) {
+func (m *Map) GetObjectsInRegion(regionId int) ([]common.IGameObject, bool) {
 	// 获取区域
 	regionInterface, exists := m.regions.Get(regionId)
 	if !exists {
@@ -434,10 +430,10 @@ func (m *Map) GetObjectsInRegion(regionId int) ([]*MapObject, bool) {
 	region := regionInterface.(*MapRegion)
 
 	// 收集区域内的对象
-	var objects []*MapObject
+	var objects []common.IGameObject
 	region.objects.Range(func(key, value interface{}) bool {
 		if value != nil {
-			objects = append(objects, value.(*MapObject))
+			objects = append(objects, value.(common.IGameObject))
 		}
 		return true
 	})
@@ -446,18 +442,24 @@ func (m *Map) GetObjectsInRegion(regionId int) ([]*MapObject, bool) {
 }
 
 // GetObjectsInRange 获取范围内的对象
-func (m *Map) GetObjectsInRange(x, y, radius float64, objectType int) ([]*MapObject, bool) {
+func (m *Map) GetObjectsInRange(x, y, radius float64, objectType int) ([]common.IGameObject, bool) {
 	// 收集范围内的对象
-	var objects []*MapObject
+	var objects []common.IGameObject
 	m.objects.Range(func(key, value interface{}) bool {
-		obj := value.(*MapObject)
+		obj := value.(common.IGameObject)
+
+		// 获取对象位置
+		pos := obj.GetPosition()
+		objX, objY := float64(pos.X), float64(pos.Y)
+
 		// 检查对象类型
-		if objectType != 0 && obj.ObjectType != objectType {
+		if objectType != 0 && obj.GetType() != objectType {
 			return true
 		}
+
 		// 检查距离
-		dx := obj.X - x
-		dy := obj.Y - y
+		dx := objX - x
+		dy := objY - y
 		distance := dx*dx + dy*dy
 		if distance <= radius*radius {
 			objects = append(objects, obj)

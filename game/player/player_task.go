@@ -3,6 +3,7 @@ package player
 import (
 	"go.uber.org/zap"
 
+	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 )
 
@@ -72,6 +73,7 @@ type Task struct {
 
 // TaskManager 任务管理系统
 type TaskManager struct {
+	*component.BaseComponent
 	playerId int64
 	logger   *zap.Logger
 	tasks    *zMap.Map // key: int64(taskId), value: *Task
@@ -80,16 +82,25 @@ type TaskManager struct {
 
 func NewTaskManager(playerId int64, logger *zap.Logger) *TaskManager {
 	return &TaskManager{
-		playerId: playerId,
-		logger:   logger,
-		tasks:    zMap.NewMap(),
-		maxCount: 20, // 最大同时进行的任务数量
+		BaseComponent: component.NewBaseComponent("tasks"),
+		playerId:      playerId,
+		logger:        logger,
+		tasks:         zMap.NewMap(),
+		maxCount:      20, // 最大同时进行的任务数量
 	}
 }
 
-func (tm *TaskManager) Init() {
+func (tm *TaskManager) Init() error {
 	// 初始化任务管理系统
 	tm.logger.Debug("Initializing task manager", zap.Int64("playerId", tm.playerId))
+	return nil
+}
+
+// Destroy 销毁任务管理组件
+func (tm *TaskManager) Destroy() {
+	// 清理任务管理资源
+	tm.logger.Debug("Destroying task manager", zap.Int64("playerId", tm.playerId))
+	tm.tasks.Clear()
 }
 
 // AcceptTask 接受任务

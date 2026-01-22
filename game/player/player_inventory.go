@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pzqf/zGameServer/event"
+	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 )
 
@@ -24,6 +25,7 @@ type Item struct {
 
 // Inventory 背包系统
 type Inventory struct {
+	*component.BaseComponent
 	playerId int64
 	logger   *zap.Logger
 	items    *zMap.Map // key: int(slot), value: *Item
@@ -49,16 +51,25 @@ func NewItem(itemId int64, itemType int, itemName string, count int, maxStack in
 
 func NewInventory(playerId int64, logger *zap.Logger) *Inventory {
 	return &Inventory{
-		playerId: playerId,
-		logger:   logger,
-		items:    zMap.NewMap(),
-		size:     60, // 默认背包大小
+		BaseComponent: component.NewBaseComponent("inventory"),
+		playerId:      playerId,
+		logger:        logger,
+		items:         zMap.NewMap(),
+		size:          60, // 默认背包大小
 	}
 }
 
-func (inv *Inventory) Init() {
+func (inv *Inventory) Init() error {
 	// 初始化背包
 	inv.logger.Debug("Initializing inventory", zap.Int64("playerId", inv.playerId))
+	return nil
+}
+
+// Destroy 销毁背包组件
+func (inv *Inventory) Destroy() {
+	// 清理背包资源
+	inv.logger.Debug("Destroying inventory", zap.Int64("playerId", inv.playerId))
+	inv.items.Clear()
 }
 
 // AddItem 添加物品到背包

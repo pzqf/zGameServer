@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pzqf/zGameServer/event"
+	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 )
 
@@ -32,6 +33,7 @@ type Mail struct {
 
 // Mailbox 邮箱系统
 type Mailbox struct {
+	*component.BaseComponent
 	playerId int64
 	logger   *zap.Logger
 	mails    *zMap.Map // key: int64(mailId), value: *Mail
@@ -41,16 +43,27 @@ type Mailbox struct {
 
 func NewMailbox(playerId int64, logger *zap.Logger) *Mailbox {
 	return &Mailbox{
-		playerId: playerId,
-		logger:   logger,
-		mails:    zMap.NewMap(),
-		maxCount: 100, // 邮箱最大容量
+		BaseComponent: component.NewBaseComponent("mailbox"),
+		playerId:      playerId,
+		logger:        logger,
+		mails:         zMap.NewMap(),
+		maxCount:      100, // 邮箱最大容量
 	}
 }
 
-func (mb *Mailbox) Init() {
+func (mb *Mailbox) Init() error {
 	// 初始化邮箱系统
 	mb.logger.Debug("Initializing mailbox", zap.Int64("playerId", mb.playerId))
+	return nil
+}
+
+// Destroy 销毁邮箱组件
+func (mb *Mailbox) Destroy() {
+	// 清理邮箱资源
+	mb.logger.Debug("Destroying mailbox", zap.Int64("playerId", mb.playerId))
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+	mb.mails.Clear()
 }
 
 // SendMail 发送邮件
