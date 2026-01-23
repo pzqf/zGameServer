@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/util"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -17,7 +18,7 @@ import (
 // 提供地图对象的管理和查询功能
 
 type MapService struct {
-	zObject.BaseObject
+	zService.BaseService
 	maps        *zMap.Map // 存储所有地图实例，key: int64(mapId), value: *Map
 	objectMap   *zMap.Map // 存储对象到地图的映射，key: int64(objectId), value: int64(mapId)
 	gameObjects *zMap.Map // 存储所有游戏对象，key: int64(objectId), value: object.IGameObject
@@ -28,12 +29,12 @@ type MapService struct {
 // 返回初始化完成的地图服务对象
 func NewMapService() *MapService {
 	ms := &MapService{
+		BaseService: *zService.NewBaseService(util.ServiceIdMap),
 		maps:        zMap.NewMap(),
 		objectMap:   zMap.NewMap(),
 		gameObjects: zMap.NewMap(),
 		maxMaps:     100,
 	}
-	ms.SetId("map_service")
 	return ms
 }
 
@@ -41,6 +42,7 @@ func NewMapService() *MapService {
 // 加载所有地图资源，准备服务运行
 // 返回初始化过程中的错误，如果有
 func (ms *MapService) Init() error {
+	ms.SetState(zService.ServiceStateInit)
 	zLog.Info("Initializing map service...")
 	// 初始化地图服务相关资源
 	// 加载所有地图
@@ -56,17 +58,20 @@ func (ms *MapService) Init() error {
 // 清理所有地图资源和对象映射
 // 返回清理过程中的错误，如果有
 func (ms *MapService) Close() error {
+	ms.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing map service...")
 	// 清理地图服务相关资源
 	ms.maps.Clear()
 	ms.objectMap.Clear()
 	ms.gameObjects.Clear()
+	ms.SetState(zService.ServiceStateStopped)
 	return nil
 }
 
 // Serve 启动地图服务
 // 启动地图同步循环，处理地图对象的移动和状态同步
 func (ms *MapService) Serve() {
+	ms.SetState(zService.ServiceStateRunning)
 	// 地图服务需要持续运行的协程，用于处理地图对象的移动同步
 	go ms.mapSyncLoop()
 }

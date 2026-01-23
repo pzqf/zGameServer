@@ -4,14 +4,15 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zEngine/zService"
+	"github.com/pzqf/zGameServer/util"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 // AuctionService 拍卖行服务
 type AuctionService struct {
-	zObject.BaseObject
+	zService.BaseService
 	items           *zMap.Map // key: int64(auctionId), value: *AuctionItem
 	playerItems     *zMap.Map // key: int64(playerId), value: []int64(auctionId)
 	pendingItems    []int64   // 待开始的拍卖物品ID
@@ -22,6 +23,7 @@ type AuctionService struct {
 
 func NewAuctionService() *AuctionService {
 	as := &AuctionService{
+		BaseService:     *zService.NewBaseService(util.ServiceIdAuction),
 		items:           zMap.NewMap(),
 		playerItems:     zMap.NewMap(),
 		pendingItems:    make([]int64, 0),
@@ -29,27 +31,30 @@ func NewAuctionService() *AuctionService {
 		feeRate:         0.05, // 5%手续费
 		minBidIncrement: 10,   // 最小加价10
 	}
-	as.BaseObject.Id = "AuctionService"
 	return as
 }
 
 func (as *AuctionService) Init() error {
+	as.SetState(zService.ServiceStateInit)
 	zLog.Info("Initializing auction service...")
 	// 初始化拍卖行服务相关资源
 	return nil
 }
 
 func (as *AuctionService) Close() error {
+	as.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing auction service...")
 	// 清理拍卖行服务相关资源
 	as.items.Clear()
 	as.playerItems.Clear()
 	as.pendingItems = make([]int64, 0)
 	as.activeItems = make([]int64, 0)
+	as.SetState(zService.ServiceStateStopped)
 	return nil
 }
 
 func (as *AuctionService) Serve() {
+	as.SetState(zService.ServiceStateRunning)
 	// 拍卖行服务需要持续运行的协程，用于处理拍卖的开始和结束
 	go as.auctionTimerLoop()
 }

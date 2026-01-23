@@ -31,6 +31,7 @@ type NetworkMetrics struct {
 	encodingErrors    int64
 	decodingErrors    int64
 	compressionErrors int64
+	droppedPackets    int64
 
 	// 采样时间
 	lastSampleTime time.Time
@@ -135,6 +136,14 @@ func (m *NetworkMetrics) IncCompressionErrors() {
 	m.compressionErrors++
 }
 
+// IncDroppedPackets 增加丢弃数据包数
+func (m *NetworkMetrics) IncDroppedPackets() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.droppedPackets++
+}
+
 // GetStats 获取统计信息
 func (m *NetworkMetrics) GetStats() map[string]interface{} {
 	m.mu.RLock()
@@ -160,6 +169,7 @@ func (m *NetworkMetrics) GetStats() map[string]interface{} {
 		"encoding_errors":         m.encodingErrors,
 		"decoding_errors":         m.decodingErrors,
 		"compression_errors":      m.compressionErrors,
+		"dropped_packets":         m.droppedPackets,
 		"sample_time":             m.lastSampleTime,
 		"elapsed_seconds":         elapsed.Seconds(),
 	}

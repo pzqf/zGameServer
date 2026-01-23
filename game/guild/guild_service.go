@@ -5,14 +5,15 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zEngine/zService"
+	"github.com/pzqf/zGameServer/util"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 // GuildService 公会服务
 type GuildService struct {
-	zObject.BaseObject
+	zService.BaseService
 	guilds       *zMap.Map // key: int64(guildId), value: *Guild
 	playerGuild  *zMap.Map // key: int64(playerId), value: int64(guildId)
 	guildNameMap *zMap.Map // key: string(guildName), value: int64(guildId)
@@ -21,31 +22,35 @@ type GuildService struct {
 
 func NewGuildService() *GuildService {
 	gs := &GuildService{
+		BaseService:  *zService.NewBaseService(util.ServiceIdGuild),
 		guilds:       zMap.NewMap(),
 		playerGuild:  zMap.NewMap(),
 		guildNameMap: zMap.NewMap(),
 		maxGuilds:    1000,
 	}
-	gs.BaseObject.Id = "GuildService"
 	return gs
 }
 
 func (gs *GuildService) Init() error {
+	gs.SetState(zService.ServiceStateInit)
 	zLog.Info("Initializing guild service...")
 	// 初始化公会服务相关资源
 	return nil
 }
 
 func (gs *GuildService) Close() error {
+	gs.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing guild service...")
 	// 清理公会服务相关资源
 	gs.guilds.Clear()
 	gs.playerGuild.Clear()
 	gs.guildNameMap.Clear()
+	gs.SetState(zService.ServiceStateStopped)
 	return nil
 }
 
 func (gs *GuildService) Serve() {
+	gs.SetState(zService.ServiceStateRunning)
 	// 公会服务不需要持续运行的协程
 }
 

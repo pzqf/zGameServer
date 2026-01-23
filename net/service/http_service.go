@@ -5,8 +5,11 @@ import (
 	"net/http"
 
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/config"
+	"github.com/pzqf/zGameServer/util"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +23,8 @@ type RouteMap map[string]HTTPHandlerFunc
 type HTTPService struct {
 	zObject.BaseObject
 	server     *http.Server
-	httpConfig *config.HTTPConfig
+	httpServer *zNet.HttpServer
+	httpConfig *config.HTTPConfigWithEnabled
 	routes     RouteMap
 	mux        *http.ServeMux
 }
@@ -31,12 +35,14 @@ func NewHTTPService() *HTTPService {
 		routes: make(RouteMap),
 		mux:    http.NewServeMux(),
 	}
-	hs.SetId(ServiceIdHttpServer)
+	hs.SetId(util.ServiceIdHttpServer)
 	return hs
 }
 
 // Init 初始化HTTP服务
 func (hs *HTTPService) Init() error {
+	hs.SetState(zService.ServiceStateInit)
+
 	hs.httpConfig = config.GetHTTPConfig()
 
 	// 如果HTTP服务未启用，直接返回
@@ -45,16 +51,29 @@ func (hs *HTTPService) Init() error {
 		return nil
 	}
 
-	zLog.Info("Initializing HTTP service...", zap.String("listen_address", hs.httpConfig.ListenAddress))
+	zLog.Info("Initializing HTTP service...", zap.String("listen_address", hs.httpConfig.Config.ListenAddress))
+
+	// 配置防DDoS攻击参数
+	ddosConfig := &config.GetConfig().DDoS
+
+	// 初始化HttpServer并设置DDoS配置
+	httpConfig := &hs.httpConfig.Config
+
+	hs.httpServer = zNet.NewHttpServer(httpConfig, zNet.WithDDoSConfig(ddosConfig))
 
 	// 注册默认路由
 	hs.registerDefaultRoutes()
 
-	// 创建HTTP服务器
-	hs.server = &http.Server{
-		Addr:    hs.httpConfig.ListenAddress,
-		Handler: hs.mux,
-	}
+	// 注册HTTP路由到zNet.HttpServer
+	hs.httpServer.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// 调用现有的路由处理
+		if handler, exists := hs.routes[r.URL.Path]; exists {
+			handler(w, r)
+		} else {
+			// 处理默认路由
+			http.Error(w, "Not found", http.StatusNotFound)
+		}
+	})
 
 	return nil
 }
@@ -66,10 +85,12 @@ func (hs *HTTPService) Close() error {
 		return nil
 	}
 
+	hs.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing HTTP service...")
-	if hs.server != nil {
-		return hs.server.Close()
+	if hs.httpServer != nil {
+		hs.httpServer.Close()
 	}
+	hs.SetState(zService.ServiceStateStopped)
 	return nil
 }
 
@@ -81,10 +102,12 @@ func (hs *HTTPService) Serve() {
 		return
 	}
 
+	hs.SetState(zService.ServiceStateRunning)
 	zLog.Info("Starting HTTP service...")
-	if hs.server != nil {
-		if err := hs.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if hs.httpServer != nil {
+		if err := hs.httpServer.Start(); err != nil {
 			zLog.Error("Failed to start HTTP service", zap.Error(err))
+			hs.SetState(zService.ServiceStateStopped)
 			return
 		}
 	}
@@ -94,6 +117,12 @@ func (hs *HTTPService) Serve() {
 func (hs *HTTPService) RegisterHandler(path string, handler HTTPHandlerFunc) {
 	hs.routes[path] = handler
 	hs.mux.HandleFunc(path, handler)
+
+	// 同时注册到zNet.HttpServer
+	if hs.httpServer != nil {
+		hs.httpServer.HandleFunc(path, handler)
+	}
+
 	zLog.Debug("Registered HTTP handler", zap.String("path", path))
 }
 
@@ -129,4 +158,15 @@ func (hs *HTTPService) registerDefaultRoutes() {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Server is running")
 	})
+}
+
+// GetState 获取服务状态
+func (hs *HTTPService) GetState() zService.ServiceState {
+	// 简单实现，返回服务状态
+	return zService.ServiceStateUnknown
+}
+
+// SetState 设置服务状态
+func (hs *HTTPService) SetState(state zService.ServiceState) {
+	// 简单实现，设置服务状态
 }

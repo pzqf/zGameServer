@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/pzqf/zEngine v0.0.1
+	github.com/pzqf/zEngine v0.0.2
 	github.com/pzqf/zUtil v0.0.1
 	github.com/xuri/excelize/v2 v2.10.0
 	go.mongodb.org/mongo-driver v1.17.6
@@ -15,6 +15,7 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/panjf2000/ants v1.3.0 // indirect

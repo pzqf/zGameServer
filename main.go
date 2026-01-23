@@ -1,12 +1,12 @@
 package main
 
 import (
-	"os"
-	"os/signal"
+	"net/http"
+	_ "net/http/pprof"
 	"runtime"
-	"syscall"
 
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zEngine/zSignal"
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/config/tables"
 	"github.com/pzqf/zGameServer/db"
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	// 初始化日志系统
-	if err := zLog.InitLogger(cfg.Log.ToLogConfig()); err != nil {
+	if err := zLog.InitLogger(&cfg.Log); err != nil {
 		// 如果日志初始化失败，使用默认日志
 		zLog.Fatal("Failed to initialize logger", zap.Error(err))
 	}
@@ -64,8 +64,8 @@ func main() {
 		zap.String("listen_address", cfg.Server.ListenAddress),
 		zap.Int("chan_size", cfg.Server.ChanSize),
 		zap.Int("max_client_count", cfg.Server.MaxClientCount),
-		zap.String("log_level", cfg.Log.Level),
-		zap.String("log_path", cfg.Log.Path),
+		zap.Int("log_level", cfg.Log.Level),
+		zap.String("log_path", cfg.Log.Filename),
 	)
 
 	// 初始化表格配置加载器
@@ -117,6 +117,20 @@ func main() {
 	// 初始化所有服务
 	gameServer.InitServices()
 
+	// 启动pprof性能分析服务器
+	go func() {
+		pprofAddr := "localhost:6060"
+		zLog.Info("Starting pprof server on " + pprofAddr)
+		if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+			zLog.Error("Failed to start pprof server", zap.Error(err))
+		}
+	}()
+
+	// 启动配置监控
+	if err := config.StartConfigMonitor("config.ini"); err != nil {
+		zLog.Error("Failed to start config monitor", zap.Error(err))
+	}
+
 	// 启动游戏服务器
 	if err := gameServer.Start(); err != nil {
 		zLog.Fatal("Failed to start game server", zap.Error(err))
@@ -125,13 +139,19 @@ func main() {
 	zLog.Info("Game Server started successfully!")
 
 	// 设置信号处理
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	//quit := make(chan os.Signal, 1)
+	//signal.Notify(quit, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// 等待信号或服务器关闭
-	<-quit
+	//<-quit
+	zSignal.GracefulExit()
 
 	zLog.Info("Received shutdown signal, stopping server...")
+
+	// 停止配置监控
+	config.StopConfigMonitor()
+
+	// 停止游戏服务器
 	gameServer.Stop()
 
 	// 等待服务器完全关闭

@@ -4,13 +4,14 @@ import (
 	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zEngine/zService"
+	"github.com/pzqf/zGameServer/util"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 type PlayerService struct {
-	zObject.BaseObject
+	zService.BaseService
 	players       *zMap.Map // key: int64(playerId), value: *Player
 	playerActors  *zMap.Map // key: int64(playerId), value: *PlayerActor
 	sessionPlayer *zMap.Map // key: int64(sessionId), value: int64(playerId)
@@ -18,21 +19,23 @@ type PlayerService struct {
 
 func NewPlayerService() *PlayerService {
 	ps := &PlayerService{
+		BaseService:   *zService.NewBaseService(util.ServiceIdPlayer),
 		players:       zMap.NewMap(),
 		playerActors:  zMap.NewMap(),
 		sessionPlayer: zMap.NewMap(),
 	}
-	ps.BaseObject.Id = "PlayerService"
 	return ps
 }
 
 func (ps *PlayerService) Init() error {
+	ps.SetState(zService.ServiceStateInit)
 	zLog.Info("Initializing player service...")
 	// 初始化玩家服务相关资源
 	return nil
 }
 
 func (ps *PlayerService) Close() error {
+	ps.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing player service...")
 	// 清理玩家服务相关资源
 	ps.players.Clear()
@@ -46,6 +49,7 @@ func (ps *PlayerService) Close() error {
 	})
 
 	ps.sessionPlayer.Clear()
+	ps.SetState(zService.ServiceStateStopped)
 	return nil
 }
 
@@ -81,6 +85,7 @@ func (ps *PlayerService) CreatePlayerActor(session *zNet.TcpServerSession, playe
 }
 
 func (ps *PlayerService) Serve() {
+	ps.SetState(zService.ServiceStateRunning)
 	// 玩家服务不需要持续运行的协程
 }
 

@@ -13,14 +13,161 @@ import (
 	"go.uber.org/zap"
 )
 
+// DBMetrics 数据库指标监控
+type DBMetrics struct {
+	totalQueries   int64
+	totalExecutes  int64
+	totalErrors    int64
+	queryLatency   int64
+	executeLatency int64
+	mu             sync.RWMutex
+}
+
+// NewDBMetrics 创建数据库指标监控实例
+func NewDBMetrics() *DBMetrics {
+	return &DBMetrics{}
+}
+
+// IncQueries 增加查询计数
+func (m *DBMetrics) IncQueries() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.totalQueries++
+}
+
+// IncExecutes 增加执行计数
+func (m *DBMetrics) IncExecutes() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.totalExecutes++
+}
+
+// IncErrors 增加错误计数
+func (m *DBMetrics) IncErrors() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.totalErrors++
+}
+
+// AddQueryLatency 添加查询延迟
+func (m *DBMetrics) AddQueryLatency(latency int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.queryLatency += latency
+}
+
+// AddExecuteLatency 添加执行延迟
+func (m *DBMetrics) AddExecuteLatency(latency int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.executeLatency += latency
+}
+
+// GetStats 获取统计信息
+func (m *DBMetrics) GetStats() map[string]interface{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	avgQueryLatency := float64(0)
+	if m.totalQueries > 0 {
+		avgQueryLatency = float64(m.queryLatency) / float64(m.totalQueries)
+	}
+
+	avgExecuteLatency := float64(0)
+	if m.totalExecutes > 0 {
+		avgExecuteLatency = float64(m.executeLatency) / float64(m.totalExecutes)
+	}
+
+	return map[string]interface{}{
+		"total_queries":       m.totalQueries,
+		"total_executes":      m.totalExecutes,
+		"total_errors":        m.totalErrors,
+		"avg_query_latency":   avgQueryLatency,
+		"avg_execute_latency": avgExecuteLatency,
+	}
+}
+
+// CacheItem 缓存项
+type CacheItem struct {
+	Value      interface{}
+	ExpireTime time.Time
+}
+
+// CacheManager 缓存管理器
+type CacheManager struct {
+	cache map[string]*CacheItem
+	mu    sync.RWMutex
+}
+
+// NewCacheManager 创建缓存管理器实例
+func NewCacheManager() *CacheManager {
+	return &CacheManager{
+		cache: make(map[string]*CacheItem),
+	}
+}
+
+// Get 获取缓存项
+func (cm *CacheManager) Get(key string) (interface{}, bool) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	item, ok := cm.cache[key]
+	if !ok {
+		return nil, false
+	}
+
+	// 检查缓存是否过期
+	if time.Now().After(item.ExpireTime) {
+		delete(cm.cache, key)
+		return nil, false
+	}
+
+	return item.Value, true
+}
+
+// Set 设置缓存项
+func (cm *CacheManager) Set(key string, value interface{}, duration time.Duration) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.cache[key] = &CacheItem{
+		Value:      value,
+		ExpireTime: time.Now().Add(duration),
+	}
+}
+
+// Delete 删除缓存项
+func (cm *CacheManager) Delete(key string) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	delete(cm.cache, key)
+}
+
+// Clear 清理过期缓存项
+func (cm *CacheManager) Clear() {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	now := time.Now()
+	for key, item := range cm.cache {
+		if now.After(item.ExpireTime) {
+			delete(cm.cache, key)
+		}
+	}
+}
+
 // MySQLConnector MySQL数据库连接器实现
 type MySQLConnector struct {
 	BaseConnector
-	db        *sql.DB        // MySQL数据库连接
-	wg        sync.WaitGroup // 等待组，用于优雅关闭
-	isRunning bool           // 运行状态
-	queryCh   chan *DBQuery  // 查询通道
-	capacity  int            // 通道容量
+	db           *sql.DB        // MySQL数据库连接
+	wg           sync.WaitGroup // 等待组，用于优雅关闭
+	isRunning    bool           // 运行状态
+	queryCh      chan *DBQuery  // 查询通道
+	capacity     int            // 通道容量
+	workerCount  int            // 工作协程数量
+	metrics      *DBMetrics     // 数据库指标监控
+	cacheManager *CacheManager  // 缓存管理器
 }
 
 // NewMySQLConnector 创建MySQL数据库连接器
@@ -33,8 +180,11 @@ func NewMySQLConnector(name string, capacity int) *MySQLConnector {
 			name:   name,
 			driver: "mysql",
 		},
-		queryCh:  make(chan *DBQuery, capacity),
-		capacity: capacity,
+		queryCh:      make(chan *DBQuery, capacity),
+		capacity:     capacity,
+		workerCount:  10, // 默认10个工作协程
+		metrics:      NewDBMetrics(),
+		cacheManager: NewCacheManager(),
 	}
 }
 
@@ -87,11 +237,55 @@ func (c *MySQLConnector) Start() error {
 
 	c.isRunning = true
 
-	// 启动查询处理协程
+	// 启动多个查询处理协程
+	for i := 0; i < c.workerCount; i++ {
+		c.wg.Add(1)
+		go c.queryWorker()
+	}
+
+	// 启动缓存清理协程
 	c.wg.Add(1)
-	go c.queryWorker()
+	go c.cacheCleaner()
+
+	// 启动指标监控协程
+	c.wg.Add(1)
+	go c.metricsPrinter()
 
 	return nil
+}
+
+// cacheCleaner 缓存清理协程
+func (c *MySQLConnector) cacheCleaner() {
+	defer c.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for c.isRunning {
+		select {
+		case <-ticker.C:
+			c.cacheManager.Clear()
+		}
+	}
+}
+
+// metricsPrinter 指标监控协程
+func (c *MySQLConnector) metricsPrinter() {
+	defer c.wg.Done()
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for c.isRunning {
+		select {
+		case <-ticker.C:
+			stats := c.metrics.GetStats()
+			zLog.Info("Database metrics",
+				zap.String("database", c.name),
+				zap.Any("stats", stats),
+			)
+		}
+	}
 }
 
 // queryWorker 处理MySQL数据库查询请求的工作协程
@@ -99,7 +293,18 @@ func (c *MySQLConnector) queryWorker() {
 	defer c.wg.Done()
 
 	for query := range c.queryCh {
+		startTime := time.Now()
+		c.metrics.IncQueries()
+
 		rows, err := c.db.Query(query.Query, query.Args...)
+		latency := time.Since(startTime).Milliseconds()
+		c.metrics.AddQueryLatency(latency)
+
+		if err != nil {
+			c.metrics.IncErrors()
+			zLog.Error("Failed to execute MySQL query", zap.Error(err), zap.String("sql", query.Query))
+		}
+
 		if query.Callback != nil {
 			query.Callback(rows, err)
 		}
@@ -143,7 +348,18 @@ func (c *MySQLConnector) Execute(sql string, args []interface{}, callback func(s
 
 	// 异步执行查询
 	go func() {
+		startTime := time.Now()
+		c.metrics.IncExecutes()
+
 		result, err := c.db.Exec(sql, args...)
+		latency := time.Since(startTime).Milliseconds()
+		c.metrics.AddExecuteLatency(latency)
+
+		if err != nil {
+			c.metrics.IncErrors()
+			zLog.Error("Failed to execute MySQL statement", zap.Error(err), zap.String("sql", sql))
+		}
+
 		if callback != nil {
 			callback(result, err)
 		}

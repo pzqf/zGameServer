@@ -63,6 +63,9 @@ func NewGameServerWithConfig(serverCfg *config.ServerConfig) *GameServer {
 }
 
 func (gs *GameServer) Start() error {
+	// 增加等待组计数
+	gs.wg.Add(1)
+
 	// 启动所有服务（包括TCP服务）
 	zLog.Info("Starting all game services...")
 	gs.ServeServices()
@@ -86,7 +89,6 @@ func (gs *GameServer) Stop() {
 }
 
 func (gs *GameServer) Wait() {
-	gs.wg.Add(1)
 	gs.wg.Wait()
 }
 
