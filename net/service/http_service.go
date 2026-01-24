@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zEngine/zObject"
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/config"
+	"github.com/pzqf/zGameServer/metrics"
 	"github.com/pzqf/zGameServer/util"
 	"go.uber.org/zap"
 )
@@ -21,7 +22,7 @@ type RouteMap map[string]HTTPHandlerFunc
 
 // HTTPService HTTP服务
 type HTTPService struct {
-	zObject.BaseObject
+	zService.BaseService
 	server     *http.Server
 	httpServer *zNet.HttpServer
 	httpConfig *config.HTTPConfigWithEnabled
@@ -32,10 +33,10 @@ type HTTPService struct {
 // NewHTTPService 创建HTTP服务
 func NewHTTPService() *HTTPService {
 	hs := &HTTPService{
-		routes: make(RouteMap),
-		mux:    http.NewServeMux(),
+		BaseService: *zService.NewBaseService(util.ServiceIdHttpServer),
+		routes:      make(RouteMap),
+		mux:         http.NewServeMux(),
 	}
-	hs.SetId(util.ServiceIdHttpServer)
 	return hs
 }
 
@@ -63,17 +64,6 @@ func (hs *HTTPService) Init() error {
 
 	// 注册默认路由
 	hs.registerDefaultRoutes()
-
-	// 注册HTTP路由到zNet.HttpServer
-	hs.httpServer.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// 调用现有的路由处理
-		if handler, exists := hs.routes[r.URL.Path]; exists {
-			handler(w, r)
-		} else {
-			// 处理默认路由
-			http.Error(w, "Not found", http.StatusNotFound)
-		}
-	})
 
 	return nil
 }
@@ -158,15 +148,10 @@ func (hs *HTTPService) registerDefaultRoutes() {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Server is running")
 	})
-}
 
-// GetState 获取服务状态
-func (hs *HTTPService) GetState() zService.ServiceState {
-	// 简单实现，返回服务状态
-	return zService.ServiceStateUnknown
-}
-
-// SetState 设置服务状态
-func (hs *HTTPService) SetState(state zService.ServiceState) {
-	// 简单实现，设置服务状态
+	// 指标暴露路由
+	hs.RegisterHandler("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		// 使用promhttp处理metrics请求
+		promhttp.HandlerFor(metrics.GetRegistry(), promhttp.HandlerOpts{}).ServeHTTP(w, r)
+	})
 }

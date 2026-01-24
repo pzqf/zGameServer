@@ -9,83 +9,10 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/config"
+	"github.com/pzqf/zGameServer/metrics"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
-
-// DBMetrics 数据库指标监控
-type DBMetrics struct {
-	totalQueries   int64
-	totalExecutes  int64
-	totalErrors    int64
-	queryLatency   int64
-	executeLatency int64
-	mu             sync.RWMutex
-}
-
-// NewDBMetrics 创建数据库指标监控实例
-func NewDBMetrics() *DBMetrics {
-	return &DBMetrics{}
-}
-
-// IncQueries 增加查询计数
-func (m *DBMetrics) IncQueries() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.totalQueries++
-}
-
-// IncExecutes 增加执行计数
-func (m *DBMetrics) IncExecutes() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.totalExecutes++
-}
-
-// IncErrors 增加错误计数
-func (m *DBMetrics) IncErrors() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.totalErrors++
-}
-
-// AddQueryLatency 添加查询延迟
-func (m *DBMetrics) AddQueryLatency(latency int64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.queryLatency += latency
-}
-
-// AddExecuteLatency 添加执行延迟
-func (m *DBMetrics) AddExecuteLatency(latency int64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.executeLatency += latency
-}
-
-// GetStats 获取统计信息
-func (m *DBMetrics) GetStats() map[string]interface{} {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	avgQueryLatency := float64(0)
-	if m.totalQueries > 0 {
-		avgQueryLatency = float64(m.queryLatency) / float64(m.totalQueries)
-	}
-
-	avgExecuteLatency := float64(0)
-	if m.totalExecutes > 0 {
-		avgExecuteLatency = float64(m.executeLatency) / float64(m.totalExecutes)
-	}
-
-	return map[string]interface{}{
-		"total_queries":       m.totalQueries,
-		"total_executes":      m.totalExecutes,
-		"total_errors":        m.totalErrors,
-		"avg_query_latency":   avgQueryLatency,
-		"avg_execute_latency": avgExecuteLatency,
-	}
-}
 
 // CacheItem 缓存项
 type CacheItem struct {
@@ -160,14 +87,14 @@ func (cm *CacheManager) Clear() {
 // MySQLConnector MySQL数据库连接器实现
 type MySQLConnector struct {
 	BaseConnector
-	db           *sql.DB        // MySQL数据库连接
-	wg           sync.WaitGroup // 等待组，用于优雅关闭
-	isRunning    bool           // 运行状态
-	queryCh      chan *DBQuery  // 查询通道
-	capacity     int            // 通道容量
-	workerCount  int            // 工作协程数量
-	metrics      *DBMetrics     // 数据库指标监控
-	cacheManager *CacheManager  // 缓存管理器
+	db           *sql.DB                  // MySQL数据库连接
+	wg           sync.WaitGroup           // 等待组，用于优雅关闭
+	isRunning    bool                     // 运行状态
+	queryCh      chan *DBQuery            // 查询通道
+	capacity     int                      // 通道容量
+	workerCount  int                      // 工作协程数量
+	metrics      *metrics.BusinessMetrics // 数据库指标监控
+	cacheManager *CacheManager            // 缓存管理器
 }
 
 // NewMySQLConnector 创建MySQL数据库连接器
@@ -183,7 +110,7 @@ func NewMySQLConnector(name string, capacity int) *MySQLConnector {
 		queryCh:      make(chan *DBQuery, capacity),
 		capacity:     capacity,
 		workerCount:  10, // 默认10个工作协程
-		metrics:      NewDBMetrics(),
+		metrics:      metrics.GetBusinessMetrics("mysql_" + name),
 		cacheManager: NewCacheManager(),
 	}
 }
@@ -279,7 +206,15 @@ func (c *MySQLConnector) metricsPrinter() {
 	for c.isRunning {
 		select {
 		case <-ticker.C:
-			stats := c.metrics.GetStats()
+			counters := c.metrics.GetAllCounters()
+			timers := c.metrics.GetAllTimers()
+			stats := make(map[string]interface{})
+			for k, v := range counters {
+				stats[k] = v
+			}
+			for k, v := range timers {
+				stats[k] = v.Milliseconds()
+			}
 			zLog.Info("Database metrics",
 				zap.String("database", c.name),
 				zap.Any("stats", stats),
@@ -294,14 +229,14 @@ func (c *MySQLConnector) queryWorker() {
 
 	for query := range c.queryCh {
 		startTime := time.Now()
-		c.metrics.IncQueries()
+		c.metrics.IncCounter("total_queries")
 
 		rows, err := c.db.Query(query.Query, query.Args...)
-		latency := time.Since(startTime).Milliseconds()
-		c.metrics.AddQueryLatency(latency)
+		latency := time.Since(startTime)
+		c.metrics.RecordTimer("query_latency", latency)
 
 		if err != nil {
-			c.metrics.IncErrors()
+			c.metrics.IncCounter("total_errors")
 			zLog.Error("Failed to execute MySQL query", zap.Error(err), zap.String("sql", query.Query))
 		}
 
@@ -349,14 +284,14 @@ func (c *MySQLConnector) Execute(sql string, args []interface{}, callback func(s
 	// 异步执行查询
 	go func() {
 		startTime := time.Now()
-		c.metrics.IncExecutes()
+		c.metrics.IncCounter("total_executes")
 
 		result, err := c.db.Exec(sql, args...)
-		latency := time.Since(startTime).Milliseconds()
-		c.metrics.AddExecuteLatency(latency)
+		latency := time.Since(startTime)
+		c.metrics.RecordTimer("execute_latency", latency)
 
 		if err != nil {
-			c.metrics.IncErrors()
+			c.metrics.IncCounter("total_errors")
 			zLog.Error("Failed to execute MySQL statement", zap.Error(err), zap.String("sql", sql))
 		}
 

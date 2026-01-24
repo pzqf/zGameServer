@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zGameServer/net/metrics"
+	"github.com/pzqf/zGameServer/metrics"
 	"google.golang.org/protobuf/proto"
 )
 

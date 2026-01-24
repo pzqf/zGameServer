@@ -4,6 +4,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"runtime"
+	"time"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zSignal"
@@ -15,7 +16,9 @@ import (
 	"github.com/pzqf/zGameServer/game/maps"
 	"github.com/pzqf/zGameServer/game/player"
 	"github.com/pzqf/zGameServer/gameserver"
+	"github.com/pzqf/zGameServer/metrics"
 	"github.com/pzqf/zGameServer/net/handler"
+	"github.com/pzqf/zGameServer/net/service"
 	"go.uber.org/zap"
 )
 
@@ -81,6 +84,17 @@ func main() {
 	// 创建游戏服务器
 	gameServer := gameserver.NewGameServer()
 
+	// 添加核心网络服务
+	tcpService := service.NewTcpService(gameServer.GetPacketRouter())
+	if err := gameServer.AddService(tcpService); err != nil {
+		zLog.Fatal("Failed to add TCP service", zap.Error(err))
+	}
+
+	httpService := service.NewHTTPService()
+	if err := gameServer.AddService(httpService); err != nil {
+		zLog.Fatal("Failed to add HTTP service", zap.Error(err))
+	}
+
 	// 注册玩家系统服务
 	playerService := player.NewPlayerService()
 	if err := gameServer.AddService(playerService); err != nil {
@@ -116,6 +130,9 @@ func main() {
 
 	// 初始化所有服务
 	gameServer.InitServices()
+
+	// 注册基本的Prometheus指标
+	registerBasicMetrics()
 
 	// 启动pprof性能分析服务器
 	go func() {
@@ -156,4 +173,43 @@ func main() {
 
 	// 等待服务器完全关闭
 	gameServer.Wait()
+}
+
+// registerBasicMetrics 注册基本的Prometheus指标
+func registerBasicMetrics() {
+	// 注册服务器启动时间指标
+	startTime := time.Now()
+	metrics.RegisterGauge("server_start_time", "Server start time in Unix timestamp", nil)
+	if gauge := metrics.GetGauge("server_start_time"); gauge != nil {
+		gauge.Set(float64(startTime.Unix()))
+	}
+
+	// 注册活跃连接数指标
+	metrics.RegisterGauge("active_connections", "Number of active connections", nil)
+
+	// 注册总连接数指标
+	metrics.RegisterCounter("total_connections", "Total number of connections", nil)
+
+	// 注册丢弃连接数指标
+	metrics.RegisterCounter("dropped_connections", "Number of dropped connections", nil)
+
+	// 注册发送字节数指标
+	metrics.RegisterCounter("total_bytes_sent", "Total bytes sent", nil)
+
+	// 注册接收字节数指标
+	metrics.RegisterCounter("total_bytes_received", "Total bytes received", nil)
+
+	// 注册编码错误数指标
+	metrics.RegisterCounter("encoding_errors", "Number of encoding errors", nil)
+
+	// 注册解码错误数指标
+	metrics.RegisterCounter("decoding_errors", "Number of decoding errors", nil)
+
+	// 注册压缩错误数指标
+	metrics.RegisterCounter("compression_errors", "Number of compression errors", nil)
+
+	// 注册丢弃数据包数指标
+	metrics.RegisterCounter("dropped_packets", "Number of dropped packets", nil)
+
+	zLog.Info("Basic Prometheus metrics registered successfully")
 }
