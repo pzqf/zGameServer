@@ -144,6 +144,13 @@ zGameServer/
 - 登录登出日志
 - 错误和崩溃日志
 
+### 11. 监控系统
+
+- **Prometheus 指标**：通过 `/metrics` 端点暴露服务器运行指标
+- **网络指标**：连接数、延迟、吞吐量等
+- **业务指标**：玩家在线数、公会数量、拍卖行交易等
+- **服务器状态**：CPU、内存、GC 等
+
 ## 配置文件
 
 ### 1. ini配置文件
@@ -870,6 +877,126 @@ func UseItem(player *object.Player, itemId int64) error {
 #### 4.3 数据库扩展
 
 在 `db/models/`中添加新的数据库模型，在 `db/dao/`中添加对应的数据访问方法。
+
+### 5. 监控系统接入
+
+#### 5.1 基本指标接入
+
+服务器默认已经在启动时注册了一些基本的 Prometheus 指标，包括：
+
+- `server_start_time`：服务器启动时间
+- `active_connections`：活跃连接数
+- `total_connections`：总连接数
+- `dropped_connections`：丢弃连接数
+- `total_bytes_sent`：发送字节数
+- `total_bytes_received`：接收字节数
+- `encoding_errors`：编码错误数
+- `decoding_errors`：解码错误数
+- `compression_errors`：压缩错误数
+- `dropped_packets`：丢弃数据包数
+
+这些指标会在服务器启动时自动注册，并通过 `/metrics` 端点暴露。
+
+#### 5.2 自定义指标接入
+
+要添加自定义的 Prometheus 指标，可以使用 `metrics` 包提供的 API：
+
+##### 5.2.1 注册 Counter 指标
+
+Counter 是一种只增不减的指标，适用于计数场景，如请求数、错误数等：
+
+```go
+import "github.com/pzqf/zGameServer/metrics"
+
+// 注册一个 Counter 指标
+counter := metrics.RegisterCounter("player_login_count", "Number of player logins", nil)
+
+// 增加计数器
+counter.Inc()
+
+// 增加指定值
+counter.Add(5)
+```
+
+##### 5.2.2 注册 Gauge 指标
+
+Gauge 是一种可以增可以减的指标，适用于表示当前状态，如在线人数、内存使用等：
+
+```go
+import "github.com/pzqf/zGameServer/metrics"
+
+// 注册一个 Gauge 指标
+gauge := metrics.RegisterGauge("online_player_count", "Number of online players", nil)
+
+// 设置值
+gauge.Set(100)
+
+// 增加值
+gauge.Inc()
+
+// 减少值
+gauge.Dec()
+
+// 增加指定值
+gauge.Add(10)
+
+// 减少指定值
+gauge.Sub(5)
+```
+
+##### 5.2.3 注册 Histogram 指标
+
+Histogram 是一种用于统计分布的指标，适用于测量延迟等场景：
+
+```go
+import (
+	"github.com/pzqf/zGameServer/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// 定义 buckets
+buckets := prometheus.ExponentialBuckets(0.1, 2, 10)
+
+// 注册一个 Histogram 指标
+histogram := metrics.RegisterHistogram("player_login_latency", "Player login latency in seconds", buckets, nil)
+
+// 记录值
+histogram.Observe(0.5) // 记录 0.5 秒的延迟
+```
+
+#### 5.3 访问指标
+
+启动服务器后，可以通过 HTTP 请求访问 `/metrics` 端点来获取所有注册的指标：
+
+```bash
+# 使用 curl 访问
+curl http://localhost:8080/metrics
+
+# 使用 PowerShell 访问（Windows）
+Invoke-WebRequest -Uri http://localhost:8080/metrics -Method GET -UseBasicParsing
+```
+
+#### 5.4 Prometheus 配置
+
+要使用 Prometheus 监控服务器，需要在 Prometheus 配置文件中添加以下内容：
+
+```yaml
+scrape_configs:
+  - job_name: 'gameserver'
+    static_configs:
+      - targets: ['localhost:8080']
+    scrape_interval: 15s
+```
+
+然后启动 Prometheus 服务，就可以在 Prometheus 界面上查看和查询指标了。
+
+#### 5.5 Grafana 可视化
+
+要使用 Grafana 可视化指标，需要：
+
+1. 安装并启动 Grafana
+2. 在 Grafana 中添加 Prometheus 数据源
+3. 创建仪表板，添加需要的图表，选择相应的指标
 
 ## 测试
 

@@ -12,7 +12,6 @@ import (
 
 type PlayerService struct {
 	zService.BaseService
-	players       *zMap.Map // key: int64(playerId), value: *Player
 	playerActors  *zMap.Map // key: int64(playerId), value: *PlayerActor
 	sessionPlayer *zMap.Map // key: int64(sessionId), value: int64(playerId)
 }
@@ -20,7 +19,6 @@ type PlayerService struct {
 func NewPlayerService() *PlayerService {
 	ps := &PlayerService{
 		BaseService:   *zService.NewBaseService(util.ServiceIdPlayer),
-		players:       zMap.NewMap(),
 		playerActors:  zMap.NewMap(),
 		sessionPlayer: zMap.NewMap(),
 	}
@@ -38,7 +36,6 @@ func (ps *PlayerService) Close() error {
 	ps.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing player service...")
 	// 清理玩家服务相关资源
-	ps.players.Clear()
 
 	// 停止并清理所有PlayerActor
 	ps.playerActors.Range(func(key, value interface{}) bool {
@@ -89,26 +86,16 @@ func (ps *PlayerService) Serve() {
 	// 玩家服务不需要持续运行的协程
 }
 
-func (ps *PlayerService) CreatePlayer(session *zNet.TcpServerSession, playerId int64, name string) (*Player, error) {
-	// 检查玩家是否已存在
-	if _, exists := ps.players.Get(playerId); exists {
-		return nil, nil // 玩家已存在
-	}
-
-	// 创建新玩家
-	player := NewPlayer(playerId, name, session)
-
-	// 存储玩家信息
-	ps.players.Store(playerId, player)
-	ps.sessionPlayer.Store(int64(session.GetSid()), playerId)
-
-	zLog.Info("Created new player", zap.Int64("playerId", playerId), zap.String("name", name))
-	return player, nil
+// CreatePlayer 创建玩家（使用PlayerActor）
+func (ps *PlayerService) CreatePlayer(session *zNet.TcpServerSession, playerId int64, name string) (*PlayerActor, error) {
+	// 直接调用CreatePlayerActor方法
+	return ps.CreatePlayerActor(session, playerId, name)
 }
 
+// GetPlayer 获取玩家（返回PlayerActor中的Player）
 func (ps *PlayerService) GetPlayer(playerId int64) *Player {
-	if player, exists := ps.players.Get(playerId); exists {
-		return player.(*Player)
+	if playerActor, exists := ps.playerActors.Get(playerId); exists {
+		return playerActor.(*PlayerActor).Player
 	}
 	return nil
 }
@@ -137,14 +124,6 @@ func (ps *PlayerService) GetPlayerActorBySession(sessionId int64) *PlayerActor {
 }
 
 func (ps *PlayerService) RemovePlayer(playerId int64) {
-	// 检查并移除传统Player
-	if player, exists := ps.players.Get(playerId); exists {
-		ps.sessionPlayer.Delete(int64(player.(*Player).Session.GetSid()))
-		ps.players.Delete(playerId)
-		zLog.Info("Removed player", zap.Int64("playerId", playerId))
-		return
-	}
-
 	// 检查并移除PlayerActor
 	if playerActor, exists := ps.playerActors.Get(playerId); exists {
 		// 从全局Actor系统中注销
@@ -171,14 +150,6 @@ func (ps *PlayerService) OnSessionClose(sessionId int64) {
 			playerActor.SendMessage(disconnectMsg)
 
 			// 移除PlayerActor
-			ps.RemovePlayer(playerId.(int64))
-			return
-		}
-
-		// 检查是否为传统Player
-		player := ps.GetPlayer(playerId.(int64))
-		if player != nil {
-			player.OnDisconnect()
 			ps.RemovePlayer(playerId.(int64))
 		}
 	}

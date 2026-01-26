@@ -80,21 +80,17 @@ func (ts *TcpService) Serve() {
 
 // startMetricsPrinter 启动定期打印网络指标的协程
 func (ts *TcpService) startMetricsPrinter() {
-	defer func() {
-		if r := recover(); r != nil {
-			zLog.Error("Metrics printer panicked", zap.Any("panic", r))
-		}
-	}()
+	defer util.Recover(func(recover interface{}, stack string) {
+		zLog.Error("Metrics printer panicked", zap.Any("panic", recover))
+	})
 
 	ticker := time.NewTicker(30 * time.Second) // 每30秒打印一次
 	defer ticker.Stop()
 
 	for range ticker.C {
-		defer func() {
-			if r := recover(); r != nil {
-				zLog.Error("Metrics printing panicked", zap.Any("panic", r))
-			}
-		}()
+		defer util.Recover(func(recover interface{}, stack string) {
+			zLog.Error("Metrics printing panicked", zap.Any("panic", recover))
+		})
 
 		stats := ts.metrics.GetStats()
 		zLog.Info("Network metrics",
@@ -125,11 +121,9 @@ func (ts *TcpService) dispatchPacket(session zNet.Session, packet *zNet.NetPacke
 	}
 
 	// 直接处理数据包，保证顺序
-	defer func() {
-		if r := recover(); r != nil {
-			zLog.Error("Packet processing panicked", zap.Any("panic", r))
-		}
-	}()
+	defer util.Recover(func(recover interface{}, stack string) {
+		zLog.Error("Packet processing panicked", zap.Any("panic", recover))
+	})
 
 	ts.processPacket(tcpSession, packet)
 

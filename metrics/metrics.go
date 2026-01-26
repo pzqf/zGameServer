@@ -1,11 +1,38 @@
 package metrics
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+// 指标类型常量
+const (
+	MetricTypeCounter   = "counter"
+	MetricTypeGauge     = "gauge"
+	MetricTypeHistogram = "histogram"
+)
+
+// 指标分类常量
+const (
+	CategoryNetwork  = "network"
+	CategoryBusiness = "business"
+	CategorySystem   = "system"
+	CategoryDatabase = "database"
+	CategoryCustom   = "custom"
+)
+
+// MetricConfig 指标配置
+type MetricConfig struct {
+	Name     string
+	Help     string
+	Type     string
+	Category string
+	Labels   map[string]string
+	Buckets  []float64 // 仅用于Histogram类型
+}
 
 // MetricsManager 指标管理管理器
 type MetricsManager struct {
@@ -18,6 +45,12 @@ type MetricsManager struct {
 	counters   map[string]prometheus.Counter
 	histograms map[string]prometheus.Histogram
 	gauges     map[string]prometheus.Gauge
+
+	// 指标分类管理
+	metricsByCategory map[string]map[string]bool
+
+	// 指标配置管理
+	metricConfigs map[string]MetricConfig
 }
 
 // BusinessMetrics 业务指标监控
@@ -37,12 +70,14 @@ type BusinessMetrics struct {
 // NewMetricsManager 创建指标管理器实例
 func NewMetricsManager() *MetricsManager {
 	return &MetricsManager{
-		networkMetrics:  NewNetworkMetrics(),
-		businessMetrics: make(map[string]*BusinessMetrics),
-		registry:        prometheus.NewRegistry(),
-		counters:        make(map[string]prometheus.Counter),
-		histograms:      make(map[string]prometheus.Histogram),
-		gauges:          make(map[string]prometheus.Gauge),
+		networkMetrics:    NewNetworkMetrics(),
+		businessMetrics:   make(map[string]*BusinessMetrics),
+		registry:          prometheus.NewRegistry(),
+		counters:          make(map[string]prometheus.Counter),
+		histograms:        make(map[string]prometheus.Histogram),
+		gauges:            make(map[string]prometheus.Gauge),
+		metricsByCategory: make(map[string]map[string]bool),
+		metricConfigs:     make(map[string]MetricConfig),
 	}
 }
 
@@ -93,6 +128,11 @@ func (m *MetricsManager) ResetAll() {
 
 // RegisterCounter 注册一个counter类型的指标
 func (m *MetricsManager) RegisterCounter(name, help string, labels map[string]string) prometheus.Counter {
+	return m.RegisterCounterWithCategory(name, help, CategoryCustom, labels)
+}
+
+// RegisterCounterWithCategory 注册一个带分类的counter类型指标
+func (m *MetricsManager) RegisterCounterWithCategory(name, help, category string, labels map[string]string) prometheus.Counter {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -108,11 +148,29 @@ func (m *MetricsManager) RegisterCounter(name, help string, labels map[string]st
 
 	m.registry.MustRegister(counter)
 	m.counters[name] = counter
+
+	// 记录指标分类
+	m.addMetricToCategory(name, category)
+
+	// 记录指标配置
+	m.metricConfigs[name] = MetricConfig{
+		Name:     name,
+		Help:     help,
+		Type:     MetricTypeCounter,
+		Category: category,
+		Labels:   labels,
+	}
+
 	return counter
 }
 
 // RegisterHistogram 注册一个histogram类型的指标
 func (m *MetricsManager) RegisterHistogram(name, help string, buckets []float64, labels map[string]string) prometheus.Histogram {
+	return m.RegisterHistogramWithCategory(name, help, CategoryCustom, buckets, labels)
+}
+
+// RegisterHistogramWithCategory 注册一个带分类的histogram类型指标
+func (m *MetricsManager) RegisterHistogramWithCategory(name, help, category string, buckets []float64, labels map[string]string) prometheus.Histogram {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -129,11 +187,30 @@ func (m *MetricsManager) RegisterHistogram(name, help string, buckets []float64,
 
 	m.registry.MustRegister(histogram)
 	m.histograms[name] = histogram
+
+	// 记录指标分类
+	m.addMetricToCategory(name, category)
+
+	// 记录指标配置
+	m.metricConfigs[name] = MetricConfig{
+		Name:     name,
+		Help:     help,
+		Type:     MetricTypeHistogram,
+		Category: category,
+		Labels:   labels,
+		Buckets:  buckets,
+	}
+
 	return histogram
 }
 
 // RegisterGauge 注册一个gauge类型的指标
 func (m *MetricsManager) RegisterGauge(name, help string, labels map[string]string) prometheus.Gauge {
+	return m.RegisterGaugeWithCategory(name, help, CategoryCustom, labels)
+}
+
+// RegisterGaugeWithCategory 注册一个带分类的gauge类型指标
+func (m *MetricsManager) RegisterGaugeWithCategory(name, help, category string, labels map[string]string) prometheus.Gauge {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -149,7 +226,78 @@ func (m *MetricsManager) RegisterGauge(name, help string, labels map[string]stri
 
 	m.registry.MustRegister(gauge)
 	m.gauges[name] = gauge
+
+	// 记录指标分类
+	m.addMetricToCategory(name, category)
+
+	// 记录指标配置
+	m.metricConfigs[name] = MetricConfig{
+		Name:     name,
+		Help:     help,
+		Type:     MetricTypeGauge,
+		Category: category,
+		Labels:   labels,
+	}
+
 	return gauge
+}
+
+// BatchRegisterMetrics 批量注册指标
+func (m *MetricsManager) BatchRegisterMetrics(configs []MetricConfig) map[string]interface{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := make(map[string]interface{})
+
+	for _, config := range configs {
+		var metric interface{}
+
+		switch config.Type {
+		case MetricTypeCounter:
+			counter := prometheus.NewCounter(prometheus.CounterOpts{
+				Name:        config.Name,
+				Help:        config.Help,
+				ConstLabels: config.Labels,
+			})
+			m.registry.MustRegister(counter)
+			m.counters[config.Name] = counter
+			metric = counter
+
+		case MetricTypeGauge:
+			gauge := prometheus.NewGauge(prometheus.GaugeOpts{
+				Name:        config.Name,
+				Help:        config.Help,
+				ConstLabels: config.Labels,
+			})
+			m.registry.MustRegister(gauge)
+			m.gauges[config.Name] = gauge
+			metric = gauge
+
+		case MetricTypeHistogram:
+			histogram := prometheus.NewHistogram(prometheus.HistogramOpts{
+				Name:        config.Name,
+				Help:        config.Help,
+				Buckets:     config.Buckets,
+				ConstLabels: config.Labels,
+			})
+			m.registry.MustRegister(histogram)
+			m.histograms[config.Name] = histogram
+			metric = histogram
+
+		default:
+			continue
+		}
+
+		// 记录指标分类
+		m.addMetricToCategory(config.Name, config.Category)
+
+		// 记录指标配置
+		m.metricConfigs[config.Name] = config
+
+		result[config.Name] = metric
+	}
+
+	return result
 }
 
 // GetCounter 获取一个counter类型的指标
@@ -176,9 +324,66 @@ func (m *MetricsManager) GetGauge(name string) prometheus.Gauge {
 	return m.gauges[name]
 }
 
+// GetMetricsByCategory 获取指定分类的所有指标
+func (m *MetricsManager) GetMetricsByCategory(category string) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	metrics := make([]string, 0)
+	if metricMap, exists := m.metricsByCategory[category]; exists {
+		for metric := range metricMap {
+			metrics = append(metrics, metric)
+		}
+	}
+
+	return metrics
+}
+
+// GetAllMetrics 获取所有指标
+func (m *MetricsManager) GetAllMetrics() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	metrics := make([]string, 0)
+
+	// 收集所有Counter类型指标
+	for metric := range m.counters {
+		metrics = append(metrics, metric)
+	}
+
+	// 收集所有Gauge类型指标
+	for metric := range m.gauges {
+		metrics = append(metrics, metric)
+	}
+
+	// 收集所有Histogram类型指标
+	for metric := range m.histograms {
+		metrics = append(metrics, metric)
+	}
+
+	return metrics
+}
+
+// GetMetricConfig 获取指标配置
+func (m *MetricsManager) GetMetricConfig(name string) (MetricConfig, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	config, exists := m.metricConfigs[name]
+	return config, exists
+}
+
 // GetRegistry 获取prometheus的registry
 func (m *MetricsManager) GetRegistry() *prometheus.Registry {
 	return m.registry
+}
+
+// addMetricToCategory 将指标添加到分类
+func (m *MetricsManager) addMetricToCategory(name, category string) {
+	if _, exists := m.metricsByCategory[category]; !exists {
+		m.metricsByCategory[category] = make(map[string]bool)
+	}
+	m.metricsByCategory[category][name] = true
 }
 
 // NewBusinessMetrics 创建业务指标实例
@@ -196,6 +401,11 @@ func (m *BusinessMetrics) IncCounter(name string) {
 	defer m.mu.Unlock()
 
 	m.counters[name]++
+
+	// 同步到Prometheus指标
+	if counter := GetCounter(name); counter != nil {
+		counter.Inc()
+	}
 }
 
 // AddCounter 增加计数器指定值
@@ -204,6 +414,11 @@ func (m *BusinessMetrics) AddCounter(name string, value int64) {
 	defer m.mu.Unlock()
 
 	m.counters[name] += value
+
+	// 同步到Prometheus指标
+	if counter := GetCounter(name); counter != nil {
+		counter.Add(float64(value))
+	}
 }
 
 // SetCounter 设置计数器值
@@ -211,7 +426,16 @@ func (m *BusinessMetrics) SetCounter(name string, value int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// 计算差值
+	diff := value - m.counters[name]
 	m.counters[name] = value
+
+	// 同步到Prometheus指标
+	if counter := GetCounter(name); counter != nil {
+		if diff > 0 {
+			counter.Add(float64(diff))
+		}
+	}
 }
 
 // GetCounter 获取计数器值
@@ -228,6 +452,11 @@ func (m *BusinessMetrics) RecordTimer(name string, duration time.Duration) {
 	defer m.mu.Unlock()
 
 	m.timers[name] = duration
+
+	// 同步到Prometheus指标
+	if histogram := GetHistogram(name); histogram != nil {
+		histogram.Observe(duration.Seconds())
+	}
 }
 
 // GetTimer 获取计时器值
@@ -274,4 +503,25 @@ func (m *BusinessMetrics) Reset() {
 	m.counters = make(map[string]int64)
 	m.timers = make(map[string]time.Duration)
 	m.lastSampleTime = time.Now()
+}
+
+// ValidateMetricName 验证指标名称是否合法
+func ValidateMetricName(name string) error {
+	if name == "" {
+		return fmt.Errorf("metric name cannot be empty")
+	}
+
+	// 简单的指标名称验证，符合Prometheus规范
+	for _, char := range name {
+		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_' || char == ':') {
+			return fmt.Errorf("metric name contains invalid character: %c", char)
+		}
+	}
+
+	return nil
+}
+
+// GenerateMetricName 生成规范化的指标名称
+func GenerateMetricName(category, name string) string {
+	return fmt.Sprintf("%s_%s", category, name)
 }
