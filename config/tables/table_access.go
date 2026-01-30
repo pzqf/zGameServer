@@ -201,3 +201,47 @@ func GetAllPets() map[int32]*models.Pet {
 
 	return GlobalTableManager.GetPetLoader().GetAllPets()
 }
+
+// GetBuffByID 根据ID获取buff配置
+func GetBuffByID(buffID int32) *models.Buff {
+	if GlobalTableManager == nil {
+		return nil
+	}
+
+	buff, ok := GlobalTableManager.GetBuffLoader().GetBuff(buffID)
+	if !ok {
+		return nil
+	}
+	return buff
+}
+
+// GetAllBuffs 获取所有buff配置
+func GetAllBuffs() map[int32]*models.Buff {
+	if GlobalTableManager == nil {
+		return nil
+	}
+
+	return GlobalTableManager.GetBuffLoader().GetAllBuffs()
+}
+
+// GetAIByID 根据ID获取AI配置
+func GetAIByID(aiID int32) *models.AI {
+	if GlobalTableManager == nil {
+		return nil
+	}
+
+	ai, ok := GlobalTableManager.GetAILoader().GetAI(aiID)
+	if !ok {
+		return nil
+	}
+	return ai
+}
+
+// GetAllAIs 获取所有AI配置
+func GetAllAIs() map[int32]*models.AI {
+	if GlobalTableManager == nil {
+		return nil
+	}
+
+	return GlobalTableManager.GetAILoader().GetAllAIs()
+}

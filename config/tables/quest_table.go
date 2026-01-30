@@ -1,8 +1,23 @@
 package tables
 
 import (
+	"sync"
+
 	"github.com/pzqf/zGameServer/config/models"
 )
+
+// QuestTableLoader 任务表格加载器
+type QuestTableLoader struct {
+	mu     sync.RWMutex
+	quests map[int32]*models.Quest
+}
+
+// NewQuestTableLoader 创建任务表格加载器
+func NewQuestTableLoader() *QuestTableLoader {
+	return &QuestTableLoader{
+		quests: make(map[int32]*models.Quest),
+	}
+}
 
 // Load 加载任务表数据
 func (qtl *QuestTableLoader) Load(dir string) error {

@@ -1,8 +1,23 @@
 package tables
 
 import (
+	"sync"
+
 	"github.com/pzqf/zGameServer/config/models"
 )
+
+// ItemTableLoader 物品表格加载器
+type ItemTableLoader struct {
+	mu    sync.RWMutex
+	items map[int32]*models.ItemBase
+}
+
+// NewItemTableLoader 创建物品表格加载器
+func NewItemTableLoader() *ItemTableLoader {
+	return &ItemTableLoader{
+		items: make(map[int32]*models.ItemBase),
+	}
+}
 
 // Load 加载物品表数据
 func (itl *ItemTableLoader) Load(dir string) error {

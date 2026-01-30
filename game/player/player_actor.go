@@ -141,22 +141,16 @@ func (pa *PlayerActor) ProcessMessage(msg zActor.ActorMessage) {
 
 // handleConnectMessage 处理连接消息
 func (pa *PlayerActor) handleConnectMessage(msg *PlayerActorConnectMessage) {
-	pa.status = PlayerStatusOnline
-	pa.Session = msg.Session
+	pa.status.Store(int32(PlayerStatusOnline))
+	pa.session = msg.Session
 	zLog.Info("Player connected (Actor)", zap.Int64("playerId", pa.playerId), zap.String("name", pa.name))
-
-	// 发布玩家登录事件
-	pa.publishEvent(event.EventPlayerLogin, nil)
 }
 
 // handleDisconnectMessage 处理断开连接消息
 func (pa *PlayerActor) handleDisconnectMessage(msg *PlayerActorDisconnectMessage) {
-	pa.status = PlayerStatusOffline
-	pa.Session = nil
+	pa.status.Store(int32(PlayerStatusOffline))
+	pa.session = nil
 	zLog.Info("Player disconnected (Actor)", zap.Int64("playerId", pa.playerId), zap.String("name", pa.name))
-
-	// 发布玩家登出事件
-	pa.publishEvent(event.EventPlayerLogout, nil)
 }
 
 // handleAddExpMessage 处理增加经验消息
@@ -165,26 +159,12 @@ func (pa *PlayerActor) handleAddExpMessage(msg *PlayerActorAddExpMessage) {
 		return
 	}
 
-	basicInfo := pa.GetBasicInfo()
-	if basicInfo == nil {
-		return
-	}
-
 	// 增加经验
-	oldExp := basicInfo.Exp.Load()
+	oldExp := pa.exp.Load()
 	newExp := oldExp + msg.Exp
-	basicInfo.Exp.Store(newExp)
+	pa.exp.Store(newExp)
 
 	zLog.Debug("Player exp increased", zap.Int64("playerId", pa.playerId), zap.Int64("oldExp", oldExp), zap.Int64("newExp", newExp))
-
-	// 检查是否升级
-	// TODO: 实现升级逻辑
-
-	// 发布经验变化事件
-	pa.publishEvent(event.EventPlayerExpAdd, &event.PlayerExpEventData{
-		PlayerID: pa.playerId,
-		Exp:      msg.Exp,
-	})
 }
 
 // handleAddGoldMessage 处理增加金币消息
@@ -193,43 +173,17 @@ func (pa *PlayerActor) handleAddGoldMessage(msg *PlayerActorAddGoldMessage) {
 		return
 	}
 
-	basicInfo := pa.GetBasicInfo()
-	if basicInfo == nil {
-		return
-	}
-
 	// 增加金币
-	oldGold := basicInfo.Gold.Load()
+	oldGold := pa.gold.Load()
 	newGold := oldGold + msg.Gold
-	basicInfo.Gold.Store(newGold)
+	pa.gold.Store(newGold)
 
 	zLog.Debug("Player gold increased", zap.Int64("playerId", pa.playerId), zap.Int64("oldGold", oldGold), zap.Int64("newGold", newGold))
-
-	// 发布金币变化事件
-	pa.publishEvent(event.EventPlayerGoldAdd, &event.PlayerGoldEventData{
-		PlayerID: pa.playerId,
-		Gold:     msg.Gold,
-	})
 }
 
 // handleUseItemMessage 处理使用物品消息
 func (pa *PlayerActor) handleUseItemMessage(msg *PlayerActorUseItemMessage) {
 	// TODO: 实现使用物品逻辑
-	inventory := pa.GetInventory()
-	basicInfo := pa.GetBasicInfo()
-	if inventory == nil || basicInfo == nil {
-		return
-	}
-
-	result := inventory.UseItem(msg.Slot, basicInfo.Level)
-
-	// 发布使用物品事件
-	pa.publishEvent(event.EventPlayerUseItem, &event.PlayerUseItemEventData{
-		PlayerID: pa.playerId,
-		ItemID:   msg.ItemID,
-		Slot:     msg.Slot,
-		Result:   result,
-	})
 }
 
 // handleEquipItemMessage 处理装备物品消息

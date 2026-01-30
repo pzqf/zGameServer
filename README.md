@@ -1,18 +1,223 @@
+
 # zGameServer
 
-一个基于Go语言开发的MMO游戏服务器框架，采用模块化设计，具有良好的可扩展性和性能。
+一个基于Go语言开发的MMO游戏服务器框架，采用模块化设计，具有良好的可扩展性和高性能。
+
+## 项目架构详解
+
+### 1. 项目整体架构
+
+zGameServer采用三层架构设计，职责清晰：
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         zGameServer (业务层)                        │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ Player   │ │ Monster  │ │ Guild    │ │ Auction  │ │ Map      │ │
+│  │ Service  │ │ Service  │ │ Service  │ │ Service  │ │ Service  │ │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                    Game Logic Systems                         │ │
+│  │  AI System | Combat System | Skill System | Buff System       │ │
+│  │  Movement | Property System | Object Manager                  │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                         zEngine (引擎层)                           │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ Service  │ │ Actor    │ │ Event    │ │ Net      │ │ Script   │ │
+│  │ Manager  │ │ System   │ │ Bus      │ │ Layer    │ │ Engine   │ │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ Log      │ │ Inject   │ │ System   │ │ Object   │ │ Etcd     │ │
+│  │ System   │ │ DI       │ │ Manager  │ │ Pool     │ │ Client   │ │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                         zUtil (工具层)                             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ DataConv │ │ Cache    │ │ Map      │ │ Queue    │ │ Stack    │ │
+│  │ Color    │ │ Crypto   │ │ Gps      │ │ File     │ │ String   │ │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ Error    │ │ Time     │ │ Tree     │ │ List     │ │ Hash     │ │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. 核心架构设计模式
+
+#### 2.1 服务架构 (Service Architecture)
+
+```go
+type GameServer struct {
+    *zService.ServiceManager   // 服务管理器（继承）
+    wg            sync.WaitGroup
+    packetRouter  *router.PacketRouter
+    protocol      protolayer.Protocol
+    objectManager *zObject.ObjectManager
+}
+```
+
+**特点：**
+- **服务拓扑排序**：自动计算服务依赖关系，确保有序启动/关闭
+- **服务状态管理**：Created → Init → Running → Stopping → Stopped
+- **依赖注入 (DI)**：基于名称的依赖注入容器
+- **并行启动**：每个服务在独立goroutine中运行
+
+#### 2.2 Actor模型 (Actor Model)
+
+```go
+type PlayerActor struct {
+    *zActor.BaseActor
+    Player *Player
+}
+```
+
+**核心特点：**
+- **消息驱动**：所有通信通过消息队列异步处理
+- **并发隔离**：每个Actor拥有独立状态，避免竞态条件
+- **全局系统**：统一管理所有Actor实例
+- **类型安全**：强类型消息定义
+
+#### 2.3 事件驱动架构 (Event-Driven Architecture)
+
+```go
+type EventBus struct {
+    handlers map[EventType][]EventHandler
+    mu       sync.RWMutex
+    running  atomic.Bool
+}
+```
+
+**核心功能：**
+- **异步事件发布**：非阻塞式事件分发
+- **事件订阅**：支持多订阅者监听同一事件
+- **事件同步**：支持同步阻塞处理
+- **事件监控**：事件处理统计和异常捕获
+
+#### 2.4 ECS架构 (Entity-Component-System)
+
+```go
+type GameObject struct {
+    *zObject.BaseObject
+    name         string
+    objectType   GameObjectType
+    position     Vector3
+    eventEmitter *zEvent.EventBus
+    components   *component.ComponentManager
+}
+```
+
+**ECS组成：**
+- **Entity (实体)**：唯一标识符，无行为
+- **Component (组件)**：纯数据容器
+  - PropertyComponent：属性管理
+  - CombatComponent：战斗逻辑
+  - SkillComponent：技能系统
+  - BuffComponent：Buff效果
+  - MovementComponent：移动控制
+- **System (系统)**：行为逻辑处理
+  - AISystem：AI决策
+  - CombatSystem：战斗计算
+  - BuffSystem：Buff管理
+  - PropertySystem：属性计算
+
+#### 2.5 对象池设计 (Object Pool)
+
+```go
+type GenericPool struct {
+    mu      sync.Mutex
+    objects []interface{}
+    newFunc func() interface{}
+    maxSize int
+}
+```
+
+**应用场景：**
+- **技能对象池**：技能频繁创建/销毁
+- **Buff对象池**：Buff效果管理
+- **Actor对象池**：PlayerActor复用
+
+#### 2.6 网络层架构 (Network Architecture)
+
+```go
+type Protocol interface {
+    Encode(protoId int32, version int32, data interface{}) (*zNet.NetPacket, error)
+    Decode(packet *zNet.NetPacket) (interface{}, error)
+}
+```
+
+**支持多种协议：**
+- ProtocolTypeProtobuf
+- ProtocolTypeJSON  
+- ProtocolTypeXML
+
+**网络层特点：**
+- **DDoS防护**：IP限流、连接控制
+- **数据包路由**：基于ProtoId的消息分发
+- **网络指标**：延迟监控、吞吐量统计
+- **安全传输**：RSA加密 + AESEncryption
 
 ## 项目特点
 
-- **模块化设计**：清晰的代码结构，便于维护和扩展
-- **多数据库支持**：支持MySQL和MongoDB数据库
-- **异步数据库操作**：所有数据库操作均为异步，提高服务器性能
-- **配置化管理**：通过配置文件和Excel表格管理服务器参数和游戏数据
-- **完善的日志系统**：使用zap日志框架，支持不同级别日志输出
-- **协议缓冲区**：使用Protocol Buffers进行高效的网络通信
-- **安全机制**：账号密码验证、角色数据保护
-- **崩溃恢复**：服务器崩溃时自动捕获堆栈信息并记录到日志
-- **组件系统**：基于组件的游戏对象管理，提供高度的灵活性和可扩展性
+### 1. 模块化设计
+- 清晰的代码结构，便于维护和扩展
+- 各模块低耦合，高内聚
+- 易于进行单元测试和集成测试
+
+### 2. 多数据库支持
+- 支持MySQL和MongoDB数据库
+- 异步数据库操作，提高服务器性能
+- 数据模型与业务逻辑分离
+
+### 3. 配置化管理
+- 通过配置文件和Excel表格管理服务器参数和游戏数据
+- 支持热更新配置，无需重启服务器
+- 方便游戏策划和运营人员进行数值调整
+
+### 4. 完善的日志系统
+- 使用zap日志框架，支持不同级别日志输出
+- 结构化日志，便于数据分析和监控
+- 日志轮转和压缩，节省存储空间
+
+### 5. 协议缓冲区
+- 使用Protocol Buffers进行高效的网络通信
+- 支持多种协议格式，满足不同场景需求
+- 可插拔协议设计，易于扩展新协议
+
+### 6. 安全机制
+- 账号密码验证和角色数据保护
+- DDoS防护机制，限制IP连接数和流量
+- 协议验证和数据完整性检查
+
+### 7. 崩溃恢复
+- 服务器崩溃时自动捕获堆栈信息并记录到日志
+- 完善的错误处理和恢复机制
+- 提高系统稳定性和可维护性
+
+### 8. 组件系统
+- 基于组件的游戏对象管理
+- 高度的灵活性和可扩展性
+- 动态添加和移除组件，实现功能扩展
+
+### 9. 依赖注入容器
+- 实现了zDI包，支持单例和工厂两种依赖类型
+- 提高代码的可维护性和可测试性
+- 自动依赖解析，简化开发流程
+
+### 10. 服务自动注册和发现
+- 扩展了zService包，实现了服务的自动注册和发现机制
+- 支持服务的依赖管理，确保服务按正确顺序启动
+- 服务状态监控，便于系统维护
+
+### 11. 监控系统
+- Prometheus指标，通过 `/metrics` 端点暴露服务器运行指标
+- 网络指标：连接数、延迟、吞吐量等
+- 业务指标：玩家在线数、公会数量、拍卖行交易等
+- 服务器状态：CPU、内存、GC等
 
 ## 技术栈
 
@@ -22,6 +227,8 @@
 - **日志**：zap日志框架
 - **配置**：ini配置文件，Excel表格
 - **依赖管理**：Go Modules
+- **依赖注入**：zDI包，支持单例和工厂两种依赖类型
+- **服务管理**：zService包，支持服务的自动注册和发现，依赖管理
 
 ## 项目结构
 
@@ -50,13 +257,17 @@ zGameServer/
 │   ├── pets/               # 宠物系统
 │   ├── player/             # 玩家系统
 │   └── systems/            # 核心游戏系统
+│       ├── ai/             # AI系统
+│       ├── buff/           # Buff系统
 │       ├── combat/         # 战斗系统
 │       ├── movement/       # 移动系统
 │       ├── property/       # 属性系统
 │       └── skill/          # 技能系统
 ├── gameserver/             # 服务器核心
+├── metrics/                # 监控系统
 ├── net/                    # 网络相关代码
 │   ├── handler/            # 请求处理器
+│   ├── metrics/            # 网络指标
 │   ├── protocol/           # 协议定义
 │   ├── protolayer/         # 协议层实现
 │   ├── router/             # 路由管理
@@ -64,6 +275,7 @@ zGameServer/
 ├── resources/              # 资源文件
 │   ├── excel_tables/       # Excel配置表
 │   └── maps/               # 地图资源
+├── util/                   # 工具类
 ├── config.ini              # 配置文件
 ├── go.mod                  # Go模块依赖
 ├── go.sum                  # 依赖校验
@@ -74,13 +286,13 @@ zGameServer/
 
 ### 1. 网络服务
 
-- TCP服务，处理客户端实时连接
-- HTTP服务，处理非实时请求（如充值下发等）
-- 数据包路由和处理
-- 会话管理
-- 支持多种协议格式（Protobuf、JSON、XML）
-- 工作线程池，并行处理数据包，提高服务器性能
-- DDoS保护，限制每个IP的连接数、数据包数和流量
+- **TCP服务**：处理客户端实时连接
+- **HTTP服务**：处理非实时请求（如充值下发等）
+- **数据包路由和处理**：基于ProtoId的消息分发
+- **会话管理**：玩家会话的创建、维护和销毁
+- **支持多种协议格式**：Protobuf、JSON、XML
+- **工作线程池**：并行处理数据包，提高服务器性能
+- **DDoS保护**：限制每个IP的连接数、数据包数和流量
 
 ### 2. 游戏对象系统
 
@@ -91,8 +303,7 @@ zGameServer/
 
 ### 3. 玩家系统
 
-- 账号创建和登录
-- 角色创建、删除和选择
+- **账号创建和登录**：账号验证、角色选择
 - **PlayerInventory**：玩家背包系统，管理物品
 - **PlayerEquipment**：玩家装备系统，管理装备
 - **PlayerSkill**：玩家技能系统，管理技能
@@ -126,108 +337,276 @@ zGameServer/
 
 ### 8. 数据库模块
 
-- 多数据库连接管理
-- 异步数据库操作
-- 数据模型定义
-- 数据访问对象（DAO）
+- **多数据库连接管理**：支持MySQL和MongoDB
+- **异步数据库操作**：所有数据库操作均为异步，提高服务器性能
+- **数据模型定义**：清晰的数据模型设计
+- **数据访问对象（DAO）**：封装数据库访问逻辑
+- **Repository层**：业务数据仓库，处理业务数据操作
 
 ### 9. 配置系统
 
-- **ini配置**：服务器基本配置，如端口、数据库连接等，直接使用zNet.HttpConfig和zLog.Config类型
+- **ini配置**：服务器基本配置，如端口、数据库连接等
 - **Excel配置表**：游戏数据配置，如物品、技能、怪物等
-- **DDoS保护配置**：限制每个IP的连接数、数据包数和流量
-- 支持热更新配置，无需重启服务器
+- **DDoS保护配置**：限制每个IP的连接数、数据包数、流量
+- **支持热更新配置**：无需重启服务器
 
 ### 10. 日志系统
 
-- 服务器运行日志
-- 登录登出日志
-- 错误和崩溃日志
+- **服务器运行日志**：记录服务器启动、关闭等关键事件
+- **登录登出日志**：记录玩家的登录和登出行为
+- **错误和崩溃日志**：记录服务器错误和崩溃信息
+- **结构化日志**：便于数据分析和监控
 
 ### 11. 监控系统
 
-- **Prometheus 指标**：通过 `/metrics` 端点暴露服务器运行指标
+- **Prometheus指标**：通过 `/metrics` 端点暴露服务器运行指标
 - **网络指标**：连接数、延迟、吞吐量等
 - **业务指标**：玩家在线数、公会数量、拍卖行交易等
-- **服务器状态**：CPU、内存、GC 等
+- **服务器状态**：CPU、内存、GC等
 
-## 配置文件
+### 12. 依赖注入容器
 
-### 1. ini配置文件
+- **zDI包**：实现了功能完整的依赖注入容器
+- **支持单例和工厂**：两种依赖类型，满足不同场景的需求
+- **线程安全**：容器的实现考虑了并发安全性
+- **依赖管理**：提供了依赖注册、解析、检查和管理的完整功能
 
-`config.ini`：服务器基本配置，包括：
+### 13. 服务管理系统
 
-- 服务器基本配置（监听地址、端口、最大连接数等）
-- HTTP配置（基于zNet.HttpConfig）：包括监听地址、最大客户端数、最大数据包大小等
-- 日志配置（基于zLog.Config）：包括级别、路径、文件大小、最大天数等
-- **DDoS保护配置**：包括每个IP的最大连接数、最大数据包数、最大流量、封禁时间等
-- 数据库配置（MySQL和MongoDB连接信息）
+- **zService包**：扩展了服务管理功能
+- **服务自动注册和发现**：实现了服务的自动注册和发现机制
+- **服务依赖管理**：支持服务的依赖管理，确保服务按照正确的顺序初始化和启动
+- **服务生命周期管理**：管理服务的创建、初始化、运行和停止等生命周期
 
-### 2. Excel配置表
+## 新手接入步骤
 
-`resources/excel_tables/`：游戏数据配置，包括：
+### 步骤1：环境准备
 
-- `item.xlsx`：物品配置
-- `skill.xlsx`：技能配置
-- `monster.xlsx`：怪物配置
-- `npc.xlsx`：NPC配置
-- `pet.xlsx`：宠物配置
-- `guild.xlsx`：公会配置
-- `quest.xlsx`：任务配置
-- `map.xlsx`：地图配置
-- `shop.xlsx`：商店配置
-- `player_level.xlsx`：玩家等级配置
+1. **安装Go环境**
+   - 下载并安装Go 1.25.5或更高版本：https://golang.org/dl/
+   - 配置GOPATH环境变量
+   - 验证安装：`go version`
 
-## 快速开始
+2. **安装数据库**
+   - 安装MySQL 5.7+ 或更高版本
+   - 安装MongoDB 4.0+ 或更高版本（可选）
+   - 创建数据库和用户
 
-### 1. 环境要求
+3. **安装Protobuf编译器**
+   - 下载Protobuf编译器：https://github.com/protocolbuffers/protobuf/releases
+   - 配置环境变量，确保 `protoc` 命令可用
 
-- Go 1.16+ 或更高版本
-- MySQL 5.7+ 或更高版本
-- MongoDB 4.0+ 或更高版本（可选）
-
-### 2. 安装依赖
+### 步骤2：克隆项目
 
 ```bash
-go mod download
+git clone https://github.com/pzqf/zGameServer.git
+cd zGameServer
 ```
 
-### 3. 配置数据库
+### 步骤3：配置项目
 
-1. 创建数据库：
-
-   - MySQL：创建账号、游戏和日志数据库
-   - MongoDB：创建游戏数据库（可选）
-2. 在 `config.ini`中配置数据库连接信息
-
-### 4. 配置Excel表格
-
-- 确保 `resources/excel_tables/`目录下有所有必要的Excel配置表
-- 根据游戏需求修改配置表内容
-
-### 5. 编译和运行
+1. **配置Go模块**
 
 ```bash
-# 编译
-go build -o gameserver main.go
+go mod tidy
+```
 
-# 运行
+2. **配置数据库**
+
+- 打开 `config.ini` 文件
+- 配置数据库连接信息：
+
+```ini
+[database.account]
+host = localhost
+port = 27017
+user = 
+password = 
+dbname = account
+charset = 
+max_idle = 10
+max_open = 100
+driver = mongo
+uri = mongodb://localhost:27017/account
+max_pool_size = 100
+min_pool_size = 10
+connect_timeout = 30
+
+[database.game]
+host = localhost
+port = 27017
+user = 
+password = 
+dbname = game
+charset = 
+max_idle = 10
+max_open = 100
+driver = mongo
+uri = mongodb://localhost:27017/game
+max_pool_size = 100
+min_pool_size = 10
+connect_timeout = 30
+
+[database.log]
+host = localhost
+port = 27017
+user = 
+password = 
+dbname = log
+charset = 
+max_idle = 10
+max_open = 100
+driver = mongo
+uri = mongodb://localhost:27017/log
+max_pool_size = 100
+min_pool_size = 10
+connect_timeout = 30
+```
+
+3. **配置Excel表格**
+
+- 确保 `resources/excel_tables/` 目录下有所有必要的Excel配置表
+- 根据游戏需求修改配置表内容
+
+### 步骤4：运行项目
+
+1. **编译项目**
+
+```bash
+go build -o gameserver main.go
+```
+
+2. **运行服务器**
+
+```bash
 ./gameserver
 ```
 
-### 6. 客户端测试
+3. **运行测试客户端**
 
 ```bash
 go run client/testclient.go
 ```
 
+### 步骤5：测试服务器
+
+1. **检查日志**
+   - 查看 `logs/server.log` 文件
+   - 确认服务器正常启动
+
+2. **测试网络连接**
+   - 使用telnet测试TCP连接：`telnet localhost 8888`
+   - 使用浏览器测试HTTP连接：http://localhost:8080/metrics
+
+3. **查看监控指标**
+   - 访问Prometheus指标端点：http://localhost:8080/metrics
+   - 查看服务器运行状态
+
+### 步骤6：开始开发
+
+1. **了解项目结构**
+
+- 阅读本README文件
+- 查看源代码注释和示例代码
+- 浏览源代码，了解各模块功能
+
+2. **学习核心模块**
+
+- **网络模块**：`net/service/tcp_service.go`
+- **玩家系统**：`game/player/player.go`
+- **战斗系统**：`game/systems/combat/combat_system.go`
+- **配置系统**：`config/ini_config.go`
+
+3. **参与开发**
+
+- 选择一个模块进行学习
+- 阅读相关代码和文档
+- 尝试修改代码并测试
+- 提交代码到版本控制系统
+
 ## 开发指南
 
-### 1. 接入新网络消息
+### 1. 依赖注入容器使用
+
+#### 1.1 注册依赖
+
+```go
+import (
+    "github.com/pzqf/zEngine/zInject"
+)
+
+// 创建依赖注入容器
+container := zInject.NewContainer()
+
+// 注册单例依赖
+container.RegisterSingleton("config", configInstance)
+
+// 注册工厂依赖
+container.Register("playerService", func() interface{} {
+    return NewPlayerService()
+})
+```
+
+#### 1.2 解析依赖
+
+```go
+// 解析单例依赖
+config, err := container.Resolve("config")
+if err != nil {
+    // 处理错误
+}
+
+// 解析工厂依赖
+playerService, err := container.Resolve("playerService")
+if err != nil {
+    // 处理错误
+}
+```
+
+#### 1.3 在GameServer中使用
+
+```go
+// 注册核心依赖
+gameServer.RegisterSingleton("protocol", protolayer.NewProtobufProtocol())
+
+// 解析依赖
+protocol, err := gameServer.ResolveDependency("protocol")
+if err != nil {
+    // 处理错误
+}
+```
+
+### 2. 服务管理使用
+
+#### 2.1 注册服务
+
+```go
+// 注册服务到GameServer
+gameServer.RegisterService(func() zService.Service {
+    return NewPlayerService()
+})
+
+// 注册带依赖的服务
+gameServer.RegisterService(func() zService.Service {
+    return NewGuildService()
+}, "playerService") // 依赖playerService
+```
+
+#### 2.2 自动注册服务
+
+```go
+// 自动注册所有已注册的服务
+err := gameServer.AutoRegisterServices()
+if err != nil {
+    // 处理错误
+}
+```
+
+### 3. 接入新网络消息
 
 #### 步骤1：定义协议
 
-1. 在 `net/protocol/game.proto`文件中添加新的消息类型：
+1. 在 `net/protocol/game.proto` 文件中添加新的消息类型：
 
 ```proto
 // 示例：添加公会创建请求和响应消息
@@ -253,7 +632,7 @@ protoc --go_out=. net/protocol/game.proto
 
 #### 步骤3：创建消息处理器
 
-在 `net/handler/`目录下创建新的处理器文件，如 `guild_handler.go`：
+在 `net/handler/` 目录下创建新的处理器文件，如 `guild_handler.go`：
 
 ```go
 package handler
@@ -290,7 +669,7 @@ func (h *GameHandler) HandleCreateGuild(request *protocol.CreateGuildRequest, se
 
 #### 步骤4：注册消息路由
 
-在 `net/router/router.go`文件中注册新的消息路由：
+在 `net/router/router.go` 文件中注册新的消息路由：
 
 ```go
 // 注册消息路由
@@ -306,11 +685,11 @@ func (r *GameRouter) RegisterRoutes() {
 
 在客户端代码中实现对应的消息发送和处理逻辑。
 
-### 2. 增加读写数据库代码
+### 4. 增加读写数据库代码
 
 #### 步骤1：定义数据模型
 
-在 `db/models/`目录下创建新的数据模型文件，如 `guild_model.go`：
+在 `db/models/` 目录下创建新的数据模型文件，如 `guild_model.go`：
 
 ```go
 package models
@@ -361,7 +740,7 @@ func (GuildMember) TableName() string {
 
 #### 步骤2：创建数据访问对象（DAO）
 
-在 `db/dao/`目录下创建新的DAO文件，如 `guild_dao.go`：
+在 `db/dao/` 目录下创建新的DAO文件，如 `guild_dao.go`：
 
 ```go
 package dao
@@ -495,619 +874,124 @@ func (gs *GuildService) CreateGuild(leaderId int64, guildName string, guildEmble
 }
 ```
 
-### 3. 增加新模块
+## 配置文件
 
-#### 3.1 全局模块
+### 1. ini配置文件
 
-全局模块是指在服务器运行期间存在且唯一的模块，如公会系统、拍卖行系统等。
+`config.ini`：服务器基本配置，包括：
 
-##### 步骤1：创建模块目录结构
+- 服务器基本配置（监听地址、端口、最大连接数等）
+- HTTP配置（基于zNet.HttpConfig）：包括监听地址、最大客户端数、最大数据包大小等
+- 日志配置（基于zLog.Config）：包括级别、路径、文件大小、最大天数等
+- **DDoS保护配置**：包括每个IP的最大连接数、最大数据包数、最大流量、封禁时间等
+- 数据库配置（MySQL和MongoDB连接信息）
 
-在 `game/`目录下创建新的模块目录，如 `guild/`：
+### 2. Excel配置表
 
-```
-game/guild/
-├── guild.go               # 公会数据结构和核心逻辑
-├── guild_service.go       # 公会服务
-└── guild_const.go         # 公会相关常量
-```
+`resources/excel_tables/`：游戏数据配置，包括：
 
-##### 步骤2：实现模块核心逻辑
+- `item.xlsx`：物品配置
+- `skill.xlsx`：技能配置
+- `monster.xlsx`：怪物配置
+- `npc.xlsx`：NPC配置
+- `pet.xlsx`：宠物配置
+- `guild.xlsx`：公会配置
+- `quest.xlsx`：任务配置
+- `map.xlsx`：地图配置
+- `shop.xlsx`：商店配置
+- `player_level.xlsx`：玩家等级配置
 
-在 `guild.go`中实现公会数据结构和核心逻辑：
+## 快速开始
 
-```go
-package guild
+### 1. 环境要求
 
-import (
-    "sync"
-    "time"
+- Go 1.25.5+ 或更高版本
+- MySQL 5.7+ 或更高版本
+- MongoDB 4.0+ 或更高版本（可选）
 
-    "github.com/pzqf/zEngine/zLog"
-    "github.com/pzqf/zUtil/zMap"
-    "go.uber.org/zap"
-)
-
-// Guild 公会结构体
-type Guild struct {
-    GuildId       int64               // 公会ID
-    GuildName     string              // 公会名称
-    GuildEmblem   string              // 公会徽章
-    LeaderId      int64               // 会长ID
-    Level         int                 // 公会等级
-    Exp           int64               // 公会经验
-    MemberCount   int                 // 成员数量
-    MaxMembers    int                 // 最大成员数量
-    Notice        string              // 公会公告
-    Members       sync.Map            // 公会成员（PlayerId -> *GuildMember）
-    Applies       sync.Map            // 公会申请（ApplyId -> *GuildApply）
-    PermissionConfig map[int]int64    // 职位权限配置
-}
-
-// GuildMember 公会成员结构体
-type GuildMember struct {
-    PlayerId     int64  // 玩家ID
-    Name         string // 玩家名称
-    Position     int    // 职位
-    Contribution int64  // 贡献值
-    JoinTime     int64  // 加入时间
-    Online       bool   // 是否在线
-    LastOnline   int64  // 最后在线时间
-}
-
-// NewGuild 创建新公会
-func NewGuild(guildModel *models.Guild) *Guild {
-    guild := &Guild{
-        GuildId:       guildModel.GuildId,
-        GuildName:     guildModel.GuildName,
-        GuildEmblem:   guildModel.GuildEmblem,
-        LeaderId:      guildModel.LeaderId,
-        Level:         guildModel.Level,
-        Exp:           guildModel.Exp,
-        MemberCount:   guildModel.MemberCount,
-        MaxMembers:    guildModel.MaxMembers,
-        Notice:        guildModel.Notice,
-        Members:       sync.Map{},
-        Applies:       sync.Map{},
-        PermissionConfig: map[int]int64{
-            GuildPositionLeader:    GuildPermissionAll,
-            GuildPositionViceLeader: GuildPermissionKick | GuildPermissionSetPosition | GuildPermissionUpdateNotice,
-            GuildPositionOfficer:    GuildPermissionKick,
-            GuildPositionMember:     0,
-        },
-    }
-    return guild
-}
-
-// 公会方法实现...
-```
-
-##### 步骤3：实现模块服务
-
-在 `guild_service.go`中实现模块服务：
-
-```go
-package guild
-
-import (
-    "sync"
-
-    "github.com/pzqf/zEngine/zLog"
-    "github.com/pzqf/zUtil/zMap"
-    "go.uber.org/zap"
-)
-
-// GuildService 公会服务
-type GuildService struct {
-    guilds      sync.Map // 公会ID -> *Guild
-    playerGuild sync.Map // 玩家ID -> 公会ID
-}
-
-var (
-    guildService *GuildService
-    once         sync.Once
-)
-
-// GetGuildService 获取公会服务单例
-func GetGuildService() *GuildService {
-    once.Do(func() {
-        guildService = &GuildService{
-            guilds:      sync.Map{},
-            playerGuild: sync.Map{},
-        }
-    })
-    return guildService
-}
-
-// CreateGuild 创建公会
-func (gs *GuildService) CreateGuild(leaderId int64, guildName string, guildEmblem string) (int64, error) {
-    // 实现逻辑...
-}
-
-// GetGuild 根据ID获取公会
-func (gs *GuildService) GetGuild(guildId int64) (*Guild, bool) {
-    guild, exists := gs.guilds.Load(guildId)
-    if !exists {
-        return nil, false
-    }
-    return guild.(*Guild), true
-}
-
-// GetPlayerGuild 获取玩家所在公会
-func (gs *GuildService) GetPlayerGuild(playerId int64) (*Guild, bool) {
-    guildId, exists := gs.playerGuild.Load(playerId)
-    if !exists {
-        return nil, false
-    }
-    return gs.GetGuild(guildId.(int64))
-}
-
-// 其他服务方法...
-```
-
-##### 步骤4：注册模块到游戏服务器
-
-在游戏服务器初始化时注册模块：
-
-```go
-// 初始化游戏服务
-func InitGameServices() {
-    // 初始化现有服务...
-  
-    // 初始化公会服务
-    guild.GetGuildService()
-}
-```
-
-#### 3.2 玩家独有模块
-
-玩家独有模块是指每个玩家拥有独立实例的模块，如背包系统、装备系统等。
-
-##### 步骤1：创建模块目录结构
-
-在 `game/player/`目录下创建新的模块目录，如 `inventory/`：
-
-```
-game/player/inventory/
-├── inventory.go           # 背包核心逻辑
-└── inventory_component.go # 背包组件
-```
-
-##### 步骤2：实现模块核心逻辑
-
-在 `inventory.go`中实现背包核心逻辑：
-
-```go
-package inventory
-
-import (
-    "sync"
-
-    "github.com/pzqf/zGameServer/game/object"
-)
-
-// Inventory 背包结构体
-type Inventory struct {
-    PlayerId    int64              // 玩家ID
-    Capacity    int                // 背包容量
-    Items       sync.Map           // 物品（ItemId -> *Item）
-    player      *object.Player     // 关联的玩家对象
-}
-
-// Item 物品结构体
-type Item struct {
-    ItemId      int64  // 物品ID
-    TemplateId  int32  // 物品模板ID
-    Count       int32  // 数量
-    Position    int32  // 位置
-    Durability  int32  // 耐久度
-}
-
-// NewInventory 创建新背包
-func NewInventory(playerId int64, capacity int, player *object.Player) *Inventory {
-    return &Inventory{
-        PlayerId: playerId,
-        Capacity: capacity,
-        Items:    sync.Map{},
-        player:   player,
-    }
-}
-
-// AddItem 添加物品
-func (inv *Inventory) AddItem(templateId int32, count int32) error {
-    // 实现逻辑...
-}
-
-// RemoveItem 移除物品
-func (inv *Inventory) RemoveItem(itemId int64, count int32) error {
-    // 实现逻辑...
-}
-
-// GetItem 获取物品
-func (inv *Inventory) GetItem(itemId int64) (*Item, bool) {
-    item, exists := inv.Items.Load(itemId)
-    if !exists {
-        return nil, false
-    }
-    return item.(*Item), true
-}
-
-// GetItems 获取所有物品
-func (inv *Inventory) GetItems() []*Item {
-    var items []*Item
-    inv.Items.Range(func(key, value interface{}) bool {
-        items = append(items, value.(*Item))
-        return true
-    })
-    return items
-}
-
-// 其他背包方法...
-```
-
-##### 步骤3：实现模块组件
-
-在 `inventory_component.go`中实现背包组件，使其能够附加到玩家对象上：
-
-```go
-package inventory
-
-import (
-    "github.com/pzqf/zGameServer/game/object"
-    "github.com/pzqf/zGameServer/game/object/component"
-)
-
-// InventoryComponent 背包组件
-type InventoryComponent struct {
-    component.BaseComponent
-    inventory *Inventory
-}
-
-// NewInventoryComponent 创建背包组件
-func NewInventoryComponent(player *object.Player) *InventoryComponent {
-    component := &InventoryComponent{
-        BaseComponent: component.BaseComponent{
-            Owner: player,
-        },
-    }
-  
-    // 创建背包
-    component.inventory = NewInventory(player.GetID(), 50, player)
-  
-    return component
-}
-
-// GetInventory 获取背包
-func (c *InventoryComponent) GetInventory() *Inventory {
-    return c.inventory
-}
-
-// OnAttach 组件附加时调用
-func (c *InventoryComponent) OnAttach() {
-    // 附加逻辑...
-}
-
-// OnDetach 组件分离时调用
-func (c *InventoryComponent) OnDetach() {
-    // 分离逻辑...
-}
-
-// GetName 获取组件名称
-func (c *InventoryComponent) GetName() string {
-    return "Inventory"
-}
-```
-
-##### 步骤4：在玩家创建时附加组件
-
-在玩家创建时附加背包组件：
-
-```go
-package player
-
-import (
-    "github.com/pzqf/zGameServer/game/object"
-    "github.com/pzqf/zGameServer/game/player/inventory"
-)
-
-// CreatePlayer 创建玩家对象
-func CreatePlayer(playerId int64, name string) *object.Player {
-    player := object.NewPlayer(playerId, name)
-  
-    // 附加背包组件
-    inventoryComponent := inventory.NewInventoryComponent(player)
-    player.AddComponent(inventoryComponent)
-  
-    // 附加其他组件...
-  
-    return player
-}
-```
-
-##### 步骤5：使用玩家独有模块
-
-通过玩家对象获取模块实例：
-
-```go
-// 获取玩家背包
-func GetPlayerInventory(player *object.Player) *inventory.Inventory {
-    inventoryComponent := player.GetComponent("Inventory")
-    if inventoryComponent == nil {
-        return nil
-    }
-    return inventoryComponent.(*inventory.InventoryComponent).GetInventory()
-}
-
-// 使用背包
-func UseItem(player *object.Player, itemId int64) error {
-    inv := GetPlayerInventory(player)
-    if inv == nil {
-        return errors.New("inventory not found")
-    }
-  
-    item, exists := inv.GetItem(itemId)
-    if !exists {
-        return errors.New("item not found")
-    }
-  
-    // 使用物品逻辑...
-  
-    return nil
-}
-```
-
-### 4. 扩展现有系统
-
-#### 4.1 组件扩展
-
-利用组件系统，为游戏对象添加新组件：
-
-1. 在 `game/object/component/`中创建新组件
-2. 实现组件接口
-3. 将组件附加到游戏对象
-
-#### 4.2 系统功能扩展
-
-为现有系统添加新功能：
-
-1. 遵循现有代码风格和架构模式
-2. 实现新功能逻辑
-3. 提供必要的接口
-
-#### 4.3 数据库扩展
-
-在 `db/models/`中添加新的数据库模型，在 `db/dao/`中添加对应的数据访问方法。
-
-### 5. 监控系统接入
-
-#### 5.1 基本指标接入
-
-服务器默认已经在启动时注册了一些基本的 Prometheus 指标，包括：
-
-- `server_start_time`：服务器启动时间
-- `active_connections`：活跃连接数
-- `total_connections`：总连接数
-- `dropped_connections`：丢弃连接数
-- `total_bytes_sent`：发送字节数
-- `total_bytes_received`：接收字节数
-- `encoding_errors`：编码错误数
-- `decoding_errors`：解码错误数
-- `compression_errors`：压缩错误数
-- `dropped_packets`：丢弃数据包数
-
-这些指标会在服务器启动时自动注册，并通过 `/metrics` 端点暴露。
-
-#### 5.2 自定义指标接入
-
-要添加自定义的 Prometheus 指标，可以使用 `metrics` 包提供的 API：
-
-##### 5.2.1 注册 Counter 指标
-
-Counter 是一种只增不减的指标，适用于计数场景，如请求数、错误数等：
-
-```go
-import "github.com/pzqf/zGameServer/metrics"
-
-// 注册一个 Counter 指标
-counter := metrics.RegisterCounter("player_login_count", "Number of player logins", nil)
-
-// 增加计数器
-counter.Inc()
-
-// 增加指定值
-counter.Add(5)
-```
-
-##### 5.2.2 注册 Gauge 指标
-
-Gauge 是一种可以增可以减的指标，适用于表示当前状态，如在线人数、内存使用等：
-
-```go
-import "github.com/pzqf/zGameServer/metrics"
-
-// 注册一个 Gauge 指标
-gauge := metrics.RegisterGauge("online_player_count", "Number of online players", nil)
-
-// 设置值
-gauge.Set(100)
-
-// 增加值
-gauge.Inc()
-
-// 减少值
-gauge.Dec()
-
-// 增加指定值
-gauge.Add(10)
-
-// 减少指定值
-gauge.Sub(5)
-```
-
-##### 5.2.3 注册 Histogram 指标
-
-Histogram 是一种用于统计分布的指标，适用于测量延迟等场景：
-
-```go
-import (
-	"github.com/pzqf/zGameServer/metrics"
-	"github.com/prometheus/client_golang/prometheus"
-)
-
-// 定义 buckets
-buckets := prometheus.ExponentialBuckets(0.1, 2, 10)
-
-// 注册一个 Histogram 指标
-histogram := metrics.RegisterHistogram("player_login_latency", "Player login latency in seconds", buckets, nil)
-
-// 记录值
-histogram.Observe(0.5) // 记录 0.5 秒的延迟
-```
-
-#### 5.3 访问指标
-
-启动服务器后，可以通过 HTTP 请求访问 `/metrics` 端点来获取所有注册的指标：
+### 2. 安装依赖
 
 ```bash
-# 使用 curl 访问
-curl http://localhost:8080/metrics
-
-# 使用 PowerShell 访问（Windows）
-Invoke-WebRequest -Uri http://localhost:8080/metrics -Method GET -UseBasicParsing
+go mod download
 ```
 
-#### 5.4 Prometheus 配置
+### 3. 配置数据库
 
-要使用 Prometheus 监控服务器，需要在 Prometheus 配置文件中添加以下内容：
+1. 创建数据库：
 
-```yaml
-scrape_configs:
-  - job_name: 'gameserver'
-    static_configs:
-      - targets: ['localhost:8080']
-    scrape_interval: 15s
-```
+   - MySQL：创建账号、游戏和日志数据库
+   - MongoDB：创建游戏数据库（可选）
+2. 在 `config.ini` 中配置数据库连接信息
 
-然后启动 Prometheus 服务，就可以在 Prometheus 界面上查看和查询指标了。
+### 4. 配置Excel表格
 
-#### 5.5 Grafana 可视化
+- 确保 `resources/excel_tables/` 目录下有所有必要的Excel配置表
+- 根据游戏需求修改配置表内容
 
-要使用 Grafana 可视化指标，需要：
-
-1. 安装并启动 Grafana
-2. 在 Grafana 中添加 Prometheus 数据源
-3. 创建仪表板，添加需要的图表，选择相应的指标
-
-## 测试
-
-运行测试：
+### 5. 编译和运行
 
 ```bash
-go test ./...
+# 编译
+go build -o gameserver main.go
+
+# 运行
+./gameserver
 ```
 
-## 日志
+### 6. 客户端测试
 
-日志文件默认输出到控制台，可根据配置文件修改为输出到文件。
+```bash
+go run client/testclient.go
+```
 
-## 安全
+## 架构优势
 
-### 1. 网络安全
+### 1. 高并发支持
 
-- 验证所有客户端输入，防止注入攻击
-- 使用加密传输敏感数据
-- 限制客户端请求频率，防止DoS攻击
+- **Actor模型**：单线程处理，避免竞态条件
+- **协程调度**：Goroutine轻量级并发
+- **无锁设计**：原子操作、无锁数据结构
 
-### 2. 数据库安全
+### 2. 易维护性
 
-- 使用参数化查询，防止SQL注入
-- 数据库密码等敏感信息通过配置文件管理，不硬编码
-- 定期备份数据库
+- **ECS架构**：数据与逻辑分离
+- **模块化设计**：低耦合、高内聚
+- **依赖注入**：组件依赖解耦
 
-### 3. 服务器安全
+### 3. 易扩展
 
-- 限制服务器端口访问
-- 定期更新服务器软件
-- 监控服务器状态，及时发现异常
+- **服务插件化**：动态加载/卸载服务
+- **协议扩展**：支持多种数据格式
+- **配置驱动**：Excel配置表灵活修改
 
-## 性能优化
+### 4. 监控完善
 
-### 1. 网络优化
+- **多维度指标**：网络、业务、系统
+- **可视化监控**：Prometheus集成
+- **异常报警**：错误自动捕获
 
-- 使用连接池管理网络连接
-- 优化协议结构，减少数据传输量
-- 使用压缩算法减少数据包大小
+## 总结
 
-### 2. 内存优化
+这个游戏服务器系统是一个**设计精良、架构合理**的企业级解决方案，主要特点：
 
-- 合理使用对象池，减少GC压力
-- 避免频繁的内存分配和释放
-- 使用适当的数据结构，平衡内存使用和性能
+1. **分层设计**：业务层 → 引擎层 → 工具层，职责清晰
+2. **模式运用**：Actor、ECS、事件驱动、对象池等成熟模式
+3. **高性能**：Goroutine、对象池、缓存优化等
+4. **高并发**：消息驱动、无锁设计、原子操作
 
-### 3. 数据库优化
+## 许可证
 
-- 使用索引优化数据库查询
-- 合理设计数据库表结构
-- 使用缓存减少数据库访问
-
-### 4. 并发优化
-
-- 合理使用goroutine，避免过度并发
-- 使用适当的同步机制，避免竞态条件
-- 优化锁的粒度，减少锁竞争
-
-## 注意事项
-
-### 1. 代码规范
-
-- **命名规范**：
-
-  - 包名：小写，使用简短的名词
-  - 函数名：驼峰命名，首字母大写表示可导出
-  - 变量名：驼峰命名，首字母小写表示私有
-- **代码风格**：
-
-  - 遵循Go语言标准代码风格
-  - 使用 `go fmt`格式化代码
-  - 代码注释清晰，解释关键逻辑
-
-### 2. 常见问题
-
-- **网络连接问题**：
-
-  - 检查网络配置和防火墙设置
-  - 确保客户端和服务器使用相同的协议版本
-- **数据库连接问题**：
-
-  - 检查数据库配置是否正确
-  - 确保数据库服务已启动
-  - 检查数据库用户权限
-- **性能问题**：
-
-  - 检查服务器资源使用情况
-  - 优化代码逻辑，减少不必要的计算
-  - 使用性能分析工具定位瓶颈
-- **配置问题**：
-
-  - 确保配置文件格式正确
-  - 检查配置项是否完整
-  - 注意配置文件的大小写敏感问题
-
-## 未来规划
-
-- 支持更多游戏类型和玩法
-- 提供更多工具和脚本，简化开发流程
-- 增强监控和运维工具，提高服务器稳定性
-- 支持更多平台和设备，扩大应用范围
-- 分布式服务器支持
-- 负载均衡
-- 热更新功能
-- 监控系统
+MIT
 
 ## 贡献
 
 欢迎提交Issue和Pull Request！
 
-## 许可证
+## 联系方式
 
-MIT License
+如果您有任何问题或建议，欢迎通过GitHub Issues与我们联系。
+
+---
+
+**zGameServer** - 简单高效的游戏服务器框架，为您的游戏提供强大的基础架构支持！
+

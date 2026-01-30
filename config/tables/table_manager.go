@@ -19,6 +19,8 @@ type TableManager struct {
 	shopLoader        *ShopTableLoader
 	guildLoader       *GuildTableLoader
 	petLoader         *PetTableLoader
+	buffLoader        *BuffTableLoader
+	aiLoader          *AITableLoader
 	loaders           []TableLoaderInterface
 	initialized       bool
 }
@@ -37,6 +39,8 @@ func NewTableManager() *TableManager {
 	shopLoader := NewShopTableLoader()
 	guildLoader := NewGuildTableLoader()
 	petLoader := NewPetTableLoader()
+	buffLoader := NewBuffTableLoader()
+	aiLoader := NewAITableLoader()
 
 	return &TableManager{
 		itemLoader:        itemLoader,
@@ -48,6 +52,8 @@ func NewTableManager() *TableManager {
 		shopLoader:        shopLoader,
 		guildLoader:       guildLoader,
 		petLoader:         petLoader,
+		buffLoader:        buffLoader,
+		aiLoader:          aiLoader,
 		loaders: []TableLoaderInterface{
 			itemLoader,
 			mapLoader,
@@ -58,6 +64,8 @@ func NewTableManager() *TableManager {
 			shopLoader,
 			guildLoader,
 			petLoader,
+			buffLoader,
+			aiLoader,
 		},
 		initialized: false,
 	}
@@ -72,10 +80,9 @@ func (tm *TableManager) LoadAllTables() error {
 
 	tablesDir := filepath.Join(rootDir, "resources", "excel_tables")
 
-	// 加载所有表格
 	for _, loader := range tm.loaders {
 		if err := loader.Load(tablesDir); err != nil {
-			//return fmt.Errorf("failed to load %s table: %w", loader.GetTableName(), err)
+			return fmt.Errorf("failed to load table %T: %w", loader, err)
 		}
 	}
 
@@ -126,6 +133,16 @@ func (tm *TableManager) GetGuildLoader() *GuildTableLoader {
 // GetPetLoader 获取宠物表格加载器
 func (tm *TableManager) GetPetLoader() *PetTableLoader {
 	return tm.petLoader
+}
+
+// GetBuffLoader 获取buff表格加载器
+func (tm *TableManager) GetBuffLoader() *BuffTableLoader {
+	return tm.buffLoader
+}
+
+// GetAILoader 获取AI表格加载器
+func (tm *TableManager) GetAILoader() *AITableLoader {
+	return tm.aiLoader
 }
 
 // IsInitialized 检查表格是否已经初始化

@@ -72,6 +72,15 @@ func (v Vector3) Distance(other Vector3) float32 {
 	return float32(math.Sqrt(float64(dx*dx + dy*dy + dz*dz)))
 }
 
+// Lerp 线性插值
+func (v Vector3) Lerp(other Vector3, t float32) Vector3 {
+	return Vector3{
+		X: v.X + (other.X-v.X)*t,
+		Y: v.Y + (other.Y-v.Y)*t,
+		Z: v.Z + (other.Z-v.Z)*t,
+	}
+}
+
 // Quaternion 四元数
 type Quaternion struct {
 	X, Y, Z, W float32
@@ -124,13 +133,13 @@ func (q Quaternion) QuaternionToEuler() (roll, pitch, yaw float32) {
 
 // Collider 碰撞盒
 type Collider struct {
-	Type     string  // 碰撞盒类型: sphere, box
-	Radius   float32 // 球体半径
-	Width    float32 // 盒子宽度
-	Height   float32 // 盒子高度
-	Depth    float32 // 盒子深度
-	Offset   Vector3 // 碰撞盒偏移
-	Trigger  bool    // 是否为触发器
+	Type    string  // 碰撞盒类型: sphere, box
+	Radius  float32 // 球体半径
+	Width   float32 // 盒子宽度
+	Height  float32 // 盒子高度
+	Depth   float32 // 盒子深度
+	Offset  Vector3 // 碰撞盒偏移
+	Trigger bool    // 是否为触发器
 }
 
 // NewSphereCollider 创建球体碰撞盒
@@ -146,11 +155,11 @@ func NewSphereCollider(radius float32, offset Vector3, trigger bool) Collider {
 // NewBoxCollider 创建盒子碰撞盒
 func NewBoxCollider(width, height, depth float32, offset Vector3, trigger bool) Collider {
 	return Collider{
-		Type:   "box",
-		Width:  width,
-		Height: height,
-		Depth:  depth,
-		Offset: offset,
+		Type:    "box",
+		Width:   width,
+		Height:  height,
+		Depth:   depth,
+		Offset:  offset,
 		Trigger: trigger,
 	}
 }

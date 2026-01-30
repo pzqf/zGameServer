@@ -1,6 +1,8 @@
 package common
 
 import (
+	"math"
+
 	"github.com/pzqf/zEngine/zEvent"
 )
 
@@ -46,6 +48,10 @@ type IGameObject interface {
 	SetActive(active bool)
 	// 获取事件总线
 	GetEventEmitter() *zEvent.EventBus
+	// 获取所属地图
+	GetMap() IMap
+	// 设置所属地图
+	SetMap(mapObj IMap)
 	// 组件管理
 	AddComponent(component IComponent)
 	GetComponent(componentID string) IComponent
@@ -53,6 +59,39 @@ type IGameObject interface {
 	HasComponent(componentID string) bool
 	GetAllComponents() []IComponent
 }
+
+// IMap 地图接口
+type IMap interface {
+	// 获取地图ID
+	GetID() uint64
+	// 获取地图名称
+	GetName() string
+	// 获取指定范围内的对象
+	GetObjectsInRange(pos Vector3, radius float32) []IGameObject
+	// 添加对象
+	AddObject(object IGameObject)
+	// 移除对象
+	RemoveObject(objectID uint64)
+	// 移动对象
+	MoveObject(object IGameObject, targetPos Vector3) error
+	// 传送对象
+	TeleportObject(object IGameObject, targetPos Vector3) error
+}
+
+// GameObjectType 游戏对象类型
+type GameObjectType int
+
+// 游戏对象类型常量
+const (
+	GameObjectTypeBasic    GameObjectType = 0
+	GameObjectTypeLiving   GameObjectType = 1
+	GameObjectTypePlayer   GameObjectType = 2
+	GameObjectTypeNPC      GameObjectType = 3
+	GameObjectTypeMonster  GameObjectType = 4
+	GameObjectTypePet      GameObjectType = 5
+	GameObjectTypeItem     GameObjectType = 6
+	GameObjectTypeBuilding GameObjectType = 7
+)
 
 // Vector3 三维向量
 type Vector3 struct {
@@ -64,65 +103,53 @@ func NewVector3(x, y, z float32) Vector3 {
 	return Vector3{X: x, Y: y, Z: z}
 }
 
-// Add 向量加法
+// Add 向量相加
 func (v Vector3) Add(other Vector3) Vector3 {
-	return Vector3{
-		X: v.X + other.X,
-		Y: v.Y + other.Y,
-		Z: v.Z + other.Z,
-	}
+	return Vector3{X: v.X + other.X, Y: v.Y + other.Y, Z: v.Z + other.Z}
 }
 
-// Subtract 向量减法
+// Subtract 向量相减
 func (v Vector3) Subtract(other Vector3) Vector3 {
-	return Vector3{
-		X: v.X - other.X,
-		Y: v.Y - other.Y,
-		Z: v.Z - other.Z,
-	}
+	return Vector3{X: v.X - other.X, Y: v.Y - other.Y, Z: v.Z - other.Z}
 }
 
 // MultiplyScalar 向量乘以标量
 func (v Vector3) MultiplyScalar(scalar float32) Vector3 {
-	return Vector3{
-		X: v.X * scalar,
-		Y: v.Y * scalar,
-		Z: v.Z * scalar,
-	}
+	return Vector3{X: v.X * scalar, Y: v.Y * scalar, Z: v.Z * scalar}
 }
 
-// Dot 向量点积
-func (v Vector3) Dot(other Vector3) float32 {
-	return v.X*other.X + v.Y*other.Y + v.Z*other.Z
+// DivideScalar 向量除以标量
+func (v Vector3) DivideScalar(scalar float32) Vector3 {
+	return Vector3{X: v.X / scalar, Y: v.Y / scalar, Z: v.Z / scalar}
 }
 
-// Cross 向量叉积
-func (v Vector3) Cross(other Vector3) Vector3 {
-	return Vector3{
-		X: v.Y*other.Z - v.Z*other.Y,
-		Y: v.Z*other.X - v.X*other.Z,
-		Z: v.X*other.Y - v.Y*other.X,
-	}
-}
-
-// Length 向量长度
-func (v Vector3) Length() float32 {
-	return float32((v.X*v.X + v.Y*v.Y + v.Z*v.Z))
-}
-
-// Normalize 向量归一化
-func (v Vector3) Normalize() Vector3 {
-	length := v.Length()
-	if length == 0 {
-		return v
-	}
-	return v.MultiplyScalar(1 / length)
-}
-
-// DistanceTo 计算到另一个向量的距离
+// DistanceTo 计算两个向量之间的距离
 func (v Vector3) DistanceTo(other Vector3) float32 {
 	dx := v.X - other.X
 	dy := v.Y - other.Y
 	dz := v.Z - other.Z
-	return float32((dx*dx + dy*dy + dz*dz))
+	return float32(math.Sqrt(float64(dx*dx + dy*dy + dz*dz)))
+}
+
+// Dot 点积
+func (v Vector3) Dot(other Vector3) float32 {
+	return v.X*other.X + v.Y*other.Y + v.Z*other.Z
+}
+
+// Length 向量长度
+func (v Vector3) Length() float32 {
+	return float32(math.Sqrt(float64(v.X*v.X + v.Y*v.Y + v.Z*v.Z)))
+}
+
+// Normalize 标准化向量
+func (v Vector3) Normalize() Vector3 {
+	length := v.Length()
+	if length == 0 {
+		return Vector3{}
+	}
+	return Vector3{
+		X: v.X / length,
+		Y: v.Y / length,
+		Z: v.Z / length,
+	}
 }

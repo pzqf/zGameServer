@@ -7,6 +7,7 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/config"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/metrics"
 	"github.com/pzqf/zGameServer/net/protolayer"
 	"github.com/pzqf/zGameServer/net/router"
@@ -20,13 +21,14 @@ type TcpService struct {
 	netConfig    *zNet.TcpConfig
 	packetRouter *router.PacketRouter
 	metrics      *metrics.NetworkMetrics
+	protocol     protolayer.Protocol
 }
 
 func NewTcpService(router *router.PacketRouter) *TcpService {
 	ts := &TcpService{
-		BaseService:  *zService.NewBaseService(util.ServiceIdTcpServer),
+		BaseService:  *zService.NewBaseService(common.ServiceIdTcpServer),
 		packetRouter: router,
-		metrics:      metrics.GetNetworkMetrics(),
+		metrics:      metrics.NewNetworkMetrics(),
 	}
 	return ts
 }
@@ -41,6 +43,20 @@ func (ts *TcpService) Init() error {
 		MaxClientCount: serverCfg.MaxClientCount,
 	}
 	zLog.Info("Initializing TCP service...", zap.String("listen_address", ts.netConfig.ListenAddress))
+
+	// 根据配置创建协议实例
+	protocolName := serverCfg.Protocol
+	if protocolName == "" {
+		protocolName = "protobuf" // 默认使用protobuf
+	}
+
+	var err error
+	ts.protocol, err = protolayer.NewProtocolByName(protocolName)
+	if err != nil {
+		zLog.Warn("Failed to create protocol, using default protobuf", zap.Error(err))
+		ts.protocol = protolayer.NewProtobufProtocol()
+	}
+	zLog.Info("Protocol initialized", zap.String("protocol", protocolName))
 
 	// 配置防DDoS攻击参数
 	ddosConfig := &config.GetConfig().DDoS

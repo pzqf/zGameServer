@@ -28,7 +28,7 @@ func NewMongoConnector(name string) *MongoConnector {
 }
 
 // Init 初始化MongoDB数据库连接
-func (c *MongoConnector) Init(dbConfig config.DBConfig) {
+func (c *MongoConnector) Init(dbConfig config.DBConfig) error {
 	c.dbConfig = dbConfig
 	c.driver = dbConfig.Driver
 
@@ -62,13 +62,13 @@ func (c *MongoConnector) Init(dbConfig config.DBConfig) {
 	c.mongoClient, err = mongo.Connect(nil, clientOptions)
 	if err != nil {
 		zLog.Error("Failed to create MongoDB client", zap.Error(err))
-		return
+		return err
 	}
 
 	// 测试连接
 	if err := c.mongoClient.Ping(nil, nil); err != nil {
 		zLog.Error("Failed to ping MongoDB database", zap.Error(err))
-		return
+		return err
 	}
 
 	// 获取MongoDB数据库实例
@@ -79,6 +79,8 @@ func (c *MongoConnector) Init(dbConfig config.DBConfig) {
 		zap.Int("port", dbConfig.Port),
 		zap.String("dbname", dbConfig.DBName),
 	)
+
+	return nil
 }
 
 // Start 启动MongoDB数据库连接

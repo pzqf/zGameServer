@@ -2,100 +2,154 @@ package property
 
 import (
 	"sync"
+
+	"github.com/pzqf/zGameServer/game/common"
 )
 
 // PropertyListener 属性变化监听器
-type PropertyListener func(ownerID uint64, key string, oldValue, newValue float32)
+type PropertyListener func(owner common.IGameObject, key string, oldValue, newValue float32)
 
-// PropertySystem 属性系统
-type PropertySystem struct {
-	mu        sync.RWMutex
-	properties map[uint64]map[string]float32 // key: ownerID, value: 属性映射
-	listeners  map[string][]PropertyListener // key: 属性名, value: 监听器列表
+// PropertyState 属性状态
+type PropertyState struct {
+	mu         sync.RWMutex
+	properties map[string]float32
 }
 
-// GlobalPropertySystem 全局属性系统实例
-var GlobalPropertySystem *PropertySystem
-
-// init 初始化全局属性系统
-func init() {
-	GlobalPropertySystem = &PropertySystem{
-		properties: make(map[uint64]map[string]float32),
-		listeners:  make(map[string][]PropertyListener),
+func NewPropertyState() *PropertyState {
+	return &PropertyState{
+		properties: make(map[string]float32),
 	}
 }
 
-// GetProperty 获取属性值
-func (ps *PropertySystem) GetProperty(ownerID uint64, key string) float32 {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	
-	if ownerProps, exists := ps.properties[ownerID]; exists {
-		return ownerProps[key]
-	}
-	return 0
+func (state *PropertyState) GetProperty(key string) float32 {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return state.properties[key]
 }
 
-// SetProperty 设置属性值
-func (ps *PropertySystem) SetProperty(ownerID uint64, key string, value float32) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	
-	// 确保所有者的属性映射存在
-	if _, exists := ps.properties[ownerID]; !exists {
-		ps.properties[ownerID] = make(map[string]float32)
+func (state *PropertyState) SetProperty(key string, value float32) float32 {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	oldValue := state.properties[key]
+	state.properties[key] = value
+	return oldValue
+}
+
+func (state *PropertyState) AddProperty(key string, value float32) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	current := state.properties[key]
+	state.properties[key] = current + value
+}
+
+func (state *PropertyState) SubProperty(key string, value float32) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	current := state.properties[key]
+	state.properties[key] = current - value
+}
+
+func (state *PropertyState) GetAllProperties() map[string]float32 {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	result := make(map[string]float32, len(state.properties))
+	for k, v := range state.properties {
+		result[k] = v
 	}
-	
-	oldValue := ps.properties[ownerID][key]
-	ps.properties[ownerID][key] = value
-	
-	// 触发属性变化事件
-	if listeners, ok := ps.listeners[key]; ok {
+	return result
+}
+
+// PropertyComponent 属性组件
+type PropertyComponent struct {
+	mu            sync.RWMutex
+	propertyState *PropertyState
+	listeners     map[string][]PropertyListener
+	owner         common.IGameObject
+}
+
+func NewPropertyComponent(owner common.IGameObject) *PropertyComponent {
+	return &PropertyComponent{
+		propertyState: NewPropertyState(),
+		listeners:     make(map[string][]PropertyListener),
+		owner:         owner,
+	}
+}
+
+func (pc *PropertyComponent) GetProperty(key string) float32 {
+	return pc.propertyState.GetProperty(key)
+}
+
+func (pc *PropertyComponent) GetPropertyByType(propType PropertyType) float32 {
+	return pc.GetProperty(GetPropertyType(propType))
+}
+
+func (pc *PropertyComponent) SetProperty(key string, value float32) {
+	oldValue := pc.propertyState.SetProperty(key, value)
+	pc.triggerPropertyChange(key, oldValue, value)
+}
+
+func (pc *PropertyComponent) SetPropertyByType(propType PropertyType, value float32) {
+	pc.SetProperty(GetPropertyType(propType), value)
+}
+
+func (pc *PropertyComponent) AddProperty(key string, value float32) {
+	current := pc.GetProperty(key)
+	pc.SetProperty(key, current+value)
+}
+
+func (pc *PropertyComponent) AddPropertyByType(propType PropertyType, value float32) {
+	pc.AddProperty(GetPropertyType(propType), value)
+}
+
+func (pc *PropertyComponent) SubProperty(key string, value float32) {
+	current := pc.GetProperty(key)
+	pc.SetProperty(key, current-value)
+}
+
+func (pc *PropertyComponent) SubPropertyByType(propType PropertyType, value float32) {
+	pc.SubProperty(GetPropertyType(propType), value)
+}
+
+func (pc *PropertyComponent) GetAllProperties() map[string]float32 {
+	return pc.propertyState.GetAllProperties()
+}
+
+func (pc *PropertyComponent) AddPropertyListener(key string, listener PropertyListener) {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+	pc.listeners[key] = append(pc.listeners[key], listener)
+}
+
+func (pc *PropertyComponent) AddPropertyListenerByType(propType PropertyType, listener PropertyListener) {
+	pc.AddPropertyListener(GetPropertyType(propType), listener)
+}
+
+func (pc *PropertyComponent) RemovePropertyListener(key string) {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+	delete(pc.listeners, key)
+}
+
+func (pc *PropertyComponent) RemovePropertyListenerByType(propType PropertyType) {
+	pc.RemovePropertyListener(GetPropertyType(propType))
+}
+
+func (pc *PropertyComponent) Update(deltaTime float64) {
+	// 属性组件不需要定期更新
+}
+
+func (pc *PropertyComponent) triggerPropertyChange(key string, oldValue, newValue float32) {
+	if oldValue == newValue {
+		return
+	}
+
+	pc.mu.RLock()
+	listeners, ok := pc.listeners[key]
+	pc.mu.RUnlock()
+
+	if ok {
 		for _, listener := range listeners {
-			listener(ownerID, key, oldValue, value)
+			listener(pc.owner, key, oldValue, newValue)
 		}
 	}
-}
-
-// AddProperty 增加属性值
-func (ps *PropertySystem) AddProperty(ownerID uint64, key string, value float32) {
-	current := ps.GetProperty(ownerID, key)
-	ps.SetProperty(ownerID, key, current+value)
-}
-
-// SubProperty 减少属性值
-func (ps *PropertySystem) SubProperty(ownerID uint64, key string, value float32) {
-	current := ps.GetProperty(ownerID, key)
-	ps.SetProperty(ownerID, key, current-value)
-}
-
-// GetAllProperties 获取所有属性
-func (ps *PropertySystem) GetAllProperties(ownerID uint64) map[string]float32 {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	
-	if ownerProps, exists := ps.properties[ownerID]; exists {
-		result := make(map[string]float32, len(ownerProps))
-		for k, v := range ownerProps {
-			result[k] = v
-		}
-		return result
-	}
-	return make(map[string]float32)
-}
-
-// AddPropertyListener 添加属性监听器
-func (ps *PropertySystem) AddPropertyListener(key string, listener PropertyListener) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	
-	ps.listeners[key] = append(ps.listeners[key], listener)
-}
-
-// RemovePropertyListener 移除属性监听器
-func (ps *PropertySystem) RemovePropertyListener(key string) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	
-	delete(ps.listeners, key)
 }

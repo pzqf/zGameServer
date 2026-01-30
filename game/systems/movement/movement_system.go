@@ -3,15 +3,15 @@ package movement
 import (
 	"sync"
 
-	"github.com/pzqf/zGameServer/game/object"
+	"github.com/pzqf/zGameServer/game/common"
 )
 
 // MovementState 移动状态
 type MovementState struct {
-	ownerID     uint64
-	startPos    object.Vector3
-	targetPos   object.Vector3
-	direction   object.Vector3
+	mu          sync.RWMutex
+	startPos    common.Vector3
+	targetPos   common.Vector3
+	direction   common.Vector3
 	distance    float32
 	speed       float32
 	isMoving    bool
@@ -20,117 +20,135 @@ type MovementState struct {
 	timeElapsed float32
 }
 
-// MovementSystem 移动系统
-type MovementSystem struct {
-	mu             sync.RWMutex
-	movementStates map[uint64]*MovementState
+func NewMovementState() *MovementState {
+	return &MovementState{}
 }
 
-// GlobalMovementSystem 全局移动系统实例
-var GlobalMovementSystem *MovementSystem
-
-// init 初始化全局移动系统
-func init() {
-	GlobalMovementSystem = &MovementSystem{
-		movementStates: make(map[uint64]*MovementState),
-	}
-}
-
-// MoveTo 移动到目标位置
-func (ms *MovementSystem) MoveTo(ownerID uint64, target object.Vector3, speed float32, currentPos object.Vector3) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-
-	// 如果速度为0，不移动
+func (state *MovementState) StartMove(startPos, targetPos common.Vector3, speed float32) {
 	if speed <= 0 {
 		return
 	}
 
-	// 计算移动距离
-	distance := currentPos.Distance(target)
-
-	// 如果距离为0，不移动
+	distance := startPos.DistanceTo(targetPos)
 	if distance <= 0.01 {
-		if state, exists := ms.movementStates[ownerID]; exists {
-			state.isMoving = false
-		}
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		state.isMoving = false
 		return
 	}
 
-	// 设置移动参数
-	state := &MovementState{
-		ownerID:     ownerID,
-		startPos:    currentPos,
-		targetPos:   target,
-		distance:    distance,
-		speed:       speed,
-		direction:   target.Sub(currentPos).Normalize(),
-		isMoving:    true,
-		progress:    0,
-		timeElapsed: 0,
-		totalTime:   distance / speed,
-	}
-
-	ms.movementStates[ownerID] = state
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.startPos = startPos
+	state.targetPos = targetPos
+	state.distance = distance
+	state.speed = speed
+	state.direction = targetPos.Subtract(startPos).Normalize()
+	state.isMoving = true
+	state.progress = 0
+	state.timeElapsed = 0
+	state.totalTime = distance / speed
 }
 
-// StopMoving 停止移动
-func (ms *MovementSystem) StopMoving(ownerID uint64) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-
-	if state, exists := ms.movementStates[ownerID]; exists {
-		state.isMoving = false
-	}
+func (state *MovementState) StopMove() {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.isMoving = false
 }
 
-// IsMoving 检查是否正在移动
-func (ms *MovementSystem) IsMoving(ownerID uint64) bool {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
-	if state, exists := ms.movementStates[ownerID]; exists {
-		return state.isMoving
-	}
-	return false
+func (state *MovementState) IsMoving() bool {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return state.isMoving
 }
 
-// GetCurrentPosition 获取当前位置
-func (ms *MovementSystem) GetCurrentPosition(ownerID uint64, basePos object.Vector3) object.Vector3 {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
+func (state *MovementState) GetCurrentPosition(basePos common.Vector3) common.Vector3 {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
 
-	if state, exists := ms.movementStates[ownerID]; exists && state.isMoving {
-		// 计算当前位置
+	if state.isMoving {
 		currentProgress := state.timeElapsed / state.totalTime
 		if currentProgress > 1.0 {
 			currentProgress = 1.0
 		}
-		return state.startPos.Add(state.direction.Mul(state.distance * currentProgress))
+		return state.startPos.Add(state.direction.MultiplyScalar(state.distance * currentProgress))
 	}
 	return basePos
 }
 
-// Update 更新移动状态
-func (ms *MovementSystem) Update(deltaTime float64) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
+func (state *MovementState) Update(deltaTime float64) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
-	for _, state := range ms.movementStates {
-		if !state.isMoving {
-			continue
-		}
+	if !state.isMoving {
+		return
+	}
 
-		// 更新移动时间
-		state.timeElapsed += float32(deltaTime)
+	state.timeElapsed += float32(deltaTime)
+	state.progress = state.timeElapsed / state.totalTime
 
-		// 计算移动进度
-		state.progress = state.timeElapsed / state.totalTime
+	if state.progress >= 1.0 {
+		state.isMoving = false
+		state.progress = 1.0
+	}
+}
 
-		// 检查是否到达目标
-		if state.progress >= 1.0 {
-			state.isMoving = false
-			state.progress = 1.0
+// MovementComponent 移动组件
+type MovementComponent struct {
+	mu            sync.RWMutex
+	movementState *MovementState
+	owner         common.IGameObject
+}
+
+func NewMovementComponent(owner common.IGameObject) *MovementComponent {
+	return &MovementComponent{
+		movementState: NewMovementState(),
+		owner:         owner,
+	}
+}
+
+func (mc *MovementComponent) MoveTo(targetPos common.Vector3, speed float32) {
+	if speed <= 0 || mc.owner == nil {
+		return
+	}
+
+	currentPos := mc.owner.GetPosition()
+	mc.movementState.StartMove(currentPos, targetPos, speed)
+}
+
+func (mc *MovementComponent) StopMoving() {
+	mc.movementState.StopMove()
+}
+
+func (mc *MovementComponent) IsMoving() bool {
+	return mc.movementState.IsMoving()
+}
+
+func (mc *MovementComponent) GetCurrentPosition(basePos common.Vector3) common.Vector3 {
+	return mc.movementState.GetCurrentPosition(basePos)
+}
+
+func (mc *MovementComponent) Update(deltaTime float64) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	mc.movementState.Update(deltaTime)
+}
+
+func (mc *MovementComponent) GetSpeed() float32 {
+	if mc.owner == nil {
+		return 0
+	}
+	if propertyComponent := mc.getOwnerPropertyComponent(); propertyComponent != nil {
+		if prop, ok := propertyComponent.(interface{ GetProperty(name string) float32 }); ok {
+			return prop.GetProperty("move_speed")
 		}
 	}
+	return 0
+}
+
+func (mc *MovementComponent) getOwnerPropertyComponent() interface{} {
+	if mc.owner == nil {
+		return nil
+	}
+	return mc.owner.GetComponent("property")
 }

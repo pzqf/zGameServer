@@ -8,8 +8,8 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
+	"github.com/pzqf/zUtil/zConfig"
 	"go.uber.org/zap"
-	"gopkg.in/ini.v1"
 )
 
 // Config 存储所有配置信息
@@ -152,9 +152,9 @@ func GetCompressionConfig() *CompressionConfig {
 
 // LoadConfig 从INI文件加载配置
 func LoadConfig(filePath string) (*Config, error) {
-	// 直接使用ini库加载配置文件
-	cfg, err := ini.Load(filePath)
-	if err != nil {
+	// 使用zConfig加载配置文件
+	zcfg := zConfig.NewConfig()
+	if err := zcfg.LoadINI(filePath); err != nil {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
@@ -164,108 +164,138 @@ func LoadConfig(filePath string) (*Config, error) {
 	}
 
 	// 解析服务器配置
-	serverSection := cfg.Section("server")
 	config.Server = ServerConfig{
-		ListenAddress:  serverSection.Key("listen_address").MustString("0.0.0.0:8888"),
-		ChanSize:       serverSection.Key("chan_size").MustInt(1024),
-		MaxClientCount: serverSection.Key("max_client_count").MustInt(10000),
-		Protocol:       serverSection.Key("protocol").MustString("protobuf"),
-		ServerID:       int32(serverSection.Key("server_id").MustInt(1)),
-		ServerName:     serverSection.Key("server_name").MustString("GameServer"),
+		ListenAddress:  getConfigString(zcfg, "server.listen_address", "0.0.0.0:8888"),
+		ChanSize:       getConfigInt(zcfg, "server.chan_size", 1024),
+		MaxClientCount: getConfigInt(zcfg, "server.max_client_count", 10000),
+		Protocol:       getConfigString(zcfg, "server.protocol", "protobuf"),
+		ServerID:       int32(getConfigInt(zcfg, "server.server_id", 1)),
+		ServerName:     getConfigString(zcfg, "server.server_name", "GameServer"),
 	}
 
 	// 解析防DDoS攻击配置
 	config.DDoS = zNet.DDoSConfig{
-		MaxConnPerIP:      serverSection.Key("max_conn_per_ip").MustInt(10),
-		ConnTimeWindow:    serverSection.Key("conn_time_window").MustInt(60),
-		MaxPacketsPerIP:   serverSection.Key("max_packets_per_ip").MustInt(100),
-		PacketTimeWindow:  serverSection.Key("packet_time_window").MustInt(1),
-		MaxBytesPerIP:     serverSection.Key("max_bytes_per_ip").MustInt64(10 * 1024 * 1024),
-		TrafficTimeWindow: serverSection.Key("traffic_time_window").MustInt(3600),
-		BanDuration:       serverSection.Key("ban_duration").MustInt(24 * 3600),
+		MaxConnPerIP:      getConfigInt(zcfg, "ddos.max_conn_per_ip", 10),
+		ConnTimeWindow:    getConfigInt(zcfg, "ddos.conn_time_window", 60),
+		MaxPacketsPerIP:   getConfigInt(zcfg, "ddos.max_packets_per_ip", 100),
+		PacketTimeWindow:  getConfigInt(zcfg, "ddos.packet_time_window", 1),
+		MaxBytesPerIP:     int64(getConfigInt(zcfg, "ddos.max_bytes_per_ip", 10*1024*1024)),
+		TrafficTimeWindow: getConfigInt(zcfg, "ddos.traffic_time_window", 3600),
+		BanDuration:       getConfigInt(zcfg, "ddos.ban_duration", 24*3600),
 	}
 
 	// 解析HTTP服务配置
-	httpSection := cfg.Section("http")
 	config.HTTP = zNet.HttpConfig{
-		ListenAddress:     httpSection.Key("listen_address").MustString("0.0.0.0:8080"),
-		MaxClientCount:    httpSection.Key("max_client_count").MustInt(10000),
-		MaxPacketDataSize: int32(httpSection.Key("max_packet_data_size").MustInt(1024 * 1024)),
+		ListenAddress:     getConfigString(zcfg, "http.listen_address", "0.0.0.0:8080"),
+		MaxClientCount:    getConfigInt(zcfg, "http.max_client_count", 10000),
+		MaxPacketDataSize: int32(getConfigInt(zcfg, "http.max_packet_data_size", 1024*1024)),
 	}
 
 	// 解析日志配置
-	logSection := cfg.Section("log")
 	config.Log = zLog.Config{
-		Level:    logSection.Key("level").MustInt(0),
-		Console:  logSection.Key("console").MustBool(true),
-		Filename: logSection.Key("filename").MustString("./logs/server.log"),
-		MaxSize:  logSection.Key("max-size").MustInt(100),
-		MaxDays:  logSection.Key("max-days").MustInt(30),
+		Level:              getConfigInt(zcfg, "log.level", 0),
+		Console:            getConfigBool(zcfg, "log.console", true),
+		Filename:           getConfigString(zcfg, "log.filename", "./logs/server.log"),
+		MaxSize:            getConfigInt(zcfg, "log.max-size", 100),
+		MaxDays:            getConfigInt(zcfg, "log.max-days", 30),
+		MaxBackups:         getConfigInt(zcfg, "log.max-backups", 5),
+		Compress:           getConfigBool(zcfg, "log.compress", true),
+		ShowCaller:         getConfigBool(zcfg, "log.show-caller", true),
+		Stacktrace:         getConfigInt(zcfg, "log.stacktrace", 2),
+		Sampling:           getConfigBool(zcfg, "log.sampling", true),
+		SamplingInitial:    getConfigInt(zcfg, "log.sampling-initial", 100),
+		SamplingThereafter: getConfigInt(zcfg, "log.sampling-thereafter", 10),
 	}
 
 	// 解析HTTP服务启用状态
-	config.HTTPEnabled = httpSection.Key("enabled").MustBool(true)
+	config.HTTPEnabled = getConfigBool(zcfg, "http.enabled", true)
 
 	// 解析压缩配置
-	compressionSection := cfg.Section("compression")
 	config.Compression = CompressionConfig{
-		Enabled:    compressionSection.Key("enabled").MustBool(true),
-		Threshold:  compressionSection.Key("threshold").MustInt(1024),
-		Level:      compressionSection.Key("level").MustInt(5),
-		MinQuality: compressionSection.Key("min_quality").MustInt(0),
-		MaxQuality: compressionSection.Key("max_quality").MustInt(100),
+		Enabled:    getConfigBool(zcfg, "net_compression.enabled", true),
+		Threshold:  getConfigInt(zcfg, "net_compression.threshold", 1024),
+		Level:      getConfigInt(zcfg, "net_compression.level", 5),
+		MinQuality: getConfigInt(zcfg, "net_compression.min_quality", 0),
+		MaxQuality: getConfigInt(zcfg, "net_compression.max_quality", 100),
 	}
 
 	// 解析数据库配置
-	for _, section := range cfg.Sections() {
-		name := section.Name()
-		if len(name) >= 9 && name[:9] == "database." {
-			// 提取数据库名称
-			dbName := name[9:]
-
-			// 解析数据库配置
-			dbCfg := DBConfig{
-				Host:           section.Key("host").MustString("localhost"),
-				Port:           section.Key("port").MustInt(3306),
-				User:           section.Key("user").MustString("root"),
-				Password:       section.Key("password").MustString(""),
-				DBName:         section.Key("dbname").MustString(dbName),
-				Charset:        section.Key("charset").MustString("utf8mb4"),
-				MaxIdle:        section.Key("max_idle").MustInt(10),
-				MaxOpen:        section.Key("max_open").MustInt(100),
-				Driver:         section.Key("driver").MustString("mysql"),
-				MaxPoolSize:    section.Key("max_pool_size").MustInt(100),
-				MinPoolSize:    section.Key("min_pool_size").MustInt(10),
-				ConnectTimeout: section.Key("connect_timeout").MustInt(30),
-			}
-
-			// 添加到数据库配置map
-			config.Databases[dbName] = dbCfg
-		}
+	// 这里简化处理，实际项目中可能需要更复杂的逻辑
+	config.Databases["game"] = DBConfig{
+		Host:           getConfigString(zcfg, "database.game.host", "localhost"),
+		Port:           getConfigInt(zcfg, "database.game.port", 27017),
+		User:           getConfigString(zcfg, "database.game.user", ""),
+		Password:       getConfigString(zcfg, "database.game.password", ""),
+		DBName:         getConfigString(zcfg, "database.game.dbname", "game"),
+		Charset:        getConfigString(zcfg, "database.game.charset", ""),
+		MaxIdle:        getConfigInt(zcfg, "database.game.max_idle", 10),
+		MaxOpen:        getConfigInt(zcfg, "database.game.max_open", 100),
+		Driver:         getConfigString(zcfg, "database.game.driver", "mongo"),
+		URI:            getConfigString(zcfg, "database.game.uri", "mongodb://localhost:27017/game"),
+		MaxPoolSize:    getConfigInt(zcfg, "database.game.max_pool_size", 100),
+		MinPoolSize:    getConfigInt(zcfg, "database.game.min_pool_size", 10),
+		ConnectTimeout: getConfigInt(zcfg, "database.game.connect_timeout", 30),
 	}
 
-	// 如果没有配置数据库，添加默认的MongoDB配置
-	if len(config.Databases) == 0 {
-		config.Databases["game"] = DBConfig{
-			Host:           "localhost",
-			Port:           27017,
-			User:           "",
-			Password:       "",
-			DBName:         "game",
-			Charset:        "",
-			MaxIdle:        10,
-			MaxOpen:        100,
-			Driver:         "mongo",
-			URI:            "mongodb://localhost:27017/game",
-			MaxPoolSize:    100,
-			MinPoolSize:    10,
-			ConnectTimeout: 30,
-		}
+	config.Databases["account"] = DBConfig{
+		Host:           getConfigString(zcfg, "database.account.host", "localhost"),
+		Port:           getConfigInt(zcfg, "database.account.port", 27017),
+		User:           getConfigString(zcfg, "database.account.user", ""),
+		Password:       getConfigString(zcfg, "database.account.password", ""),
+		DBName:         getConfigString(zcfg, "database.account.dbname", "account"),
+		Charset:        getConfigString(zcfg, "database.account.charset", ""),
+		MaxIdle:        getConfigInt(zcfg, "database.account.max_idle", 10),
+		MaxOpen:        getConfigInt(zcfg, "database.account.max_open", 100),
+		Driver:         getConfigString(zcfg, "database.account.driver", "mongo"),
+		URI:            getConfigString(zcfg, "database.account.uri", "mongodb://localhost:27017/account"),
+		MaxPoolSize:    getConfigInt(zcfg, "database.account.max_pool_size", 100),
+		MinPoolSize:    getConfigInt(zcfg, "database.account.min_pool_size", 10),
+		ConnectTimeout: getConfigInt(zcfg, "database.account.connect_timeout", 30),
+	}
+
+	config.Databases["log"] = DBConfig{
+		Host:           getConfigString(zcfg, "database.log.host", "localhost"),
+		Port:           getConfigInt(zcfg, "database.log.port", 27017),
+		User:           getConfigString(zcfg, "database.log.user", ""),
+		Password:       getConfigString(zcfg, "database.log.password", ""),
+		DBName:         getConfigString(zcfg, "database.log.dbname", "log"),
+		Charset:        getConfigString(zcfg, "database.log.charset", ""),
+		MaxIdle:        getConfigInt(zcfg, "database.log.max_idle", 10),
+		MaxOpen:        getConfigInt(zcfg, "database.log.max_open", 100),
+		Driver:         getConfigString(zcfg, "database.log.driver", "mongo"),
+		URI:            getConfigString(zcfg, "database.log.uri", "mongodb://localhost:27017/log"),
+		MaxPoolSize:    getConfigInt(zcfg, "database.log.max_pool_size", 100),
+		MinPoolSize:    getConfigInt(zcfg, "database.log.min_pool_size", 10),
+		ConnectTimeout: getConfigInt(zcfg, "database.log.connect_timeout", 30),
 	}
 
 	// 设置全局配置实例
 	GlobalConfig = config
 	return config, nil
+}
+
+// 辅助函数：获取字符串配置
+func getConfigString(cfg *zConfig.Config, key string, defaultValue string) string {
+	if value, err := cfg.GetString(key); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+// 辅助函数：获取整数配置
+func getConfigInt(cfg *zConfig.Config, key string, defaultValue int) int {
+	if value, err := cfg.GetInt(key); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+// 辅助函数：获取布尔配置
+func getConfigBool(cfg *zConfig.Config, key string, defaultValue bool) bool {
+	if value, err := cfg.GetBool(key); err == nil {
+		return value
+	}
+	return defaultValue
 }
 
 // Validate 验证配置的有效性

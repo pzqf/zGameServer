@@ -7,7 +7,7 @@ import (
 )
 
 // JSONProtocol JSON协议实现
-type JSONProtocol struct {}
+type JSONProtocol struct{}
 
 // NewJSONProtocol 创建JSON协议实例
 func NewJSONProtocol() *JSONProtocol {

@@ -1,13 +1,14 @@
 package monster
 
 import (
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object"
 	"github.com/pzqf/zGameServer/game/object/component"
 )
 
 // Monster 怪物类
 type Monster struct {
-	object.LivingObject
+	*object.LivingObject
 	aiBehavior *AIBehavior
 	dropConfig *DropConfig
 }
@@ -52,15 +53,72 @@ func (ai *AIBehavior) SetActive(active bool) {
 	ai.BaseComponent.SetActive(active)
 }
 
-// DropConfig 怪物掉落配置
+// GetState 获取AI状态
+func (ai *AIBehavior) GetState() string {
+	return ai.state
+}
+
+// SetState 设置AI状态
+func (ai *AIBehavior) SetState(state string) {
+	ai.state = state
+}
+
+// GetPatrolPath 获取巡逻路径
+func (ai *AIBehavior) GetPatrolPath() []object.Vector3 {
+	return ai.patrolPath
+}
+
+// SetPatrolPath 设置巡逻路径
+func (ai *AIBehavior) SetPatrolPath(path []object.Vector3) {
+	ai.patrolPath = path
+}
+
+// GetCurrentPatrolPoint 获取当前巡逻点
+func (ai *AIBehavior) GetCurrentPatrolPoint() int {
+	return ai.currentPatrolPoint
+}
+
+// SetCurrentPatrolPoint 设置当前巡逻点
+func (ai *AIBehavior) SetCurrentPatrolPoint(point int) {
+	ai.currentPatrolPoint = point
+}
+
+// GetPerceptionRange 获取感知范围
+func (ai *AIBehavior) GetPerceptionRange() float32 {
+	return ai.perceptionRange
+}
+
+// SetPerceptionRange 设置感知范围
+func (ai *AIBehavior) SetPerceptionRange(range_ float32) {
+	ai.perceptionRange = range_
+}
+
+// GetChaseRange 获取追击范围
+func (ai *AIBehavior) GetChaseRange() float32 {
+	return ai.chaseRange
+}
+
+// SetChaseRange 设置追击范围
+func (ai *AIBehavior) SetChaseRange(range_ float32) {
+	ai.chaseRange = range_
+}
+
+// GetRunawayRange 获取逃跑范围
+func (ai *AIBehavior) GetRunawayRange() float32 {
+	return ai.runawayRange
+}
+
+// SetRunawayRange 设置逃跑范围
+func (ai *AIBehavior) SetRunawayRange(range_ float32) {
+	ai.runawayRange = range_
+}
+
+// DropConfig 掉落配置
 type DropConfig struct {
 	*component.BaseComponent
-	// 掉落物品列表
-	dropItems map[int32]float32 // key: 物品ID, value: 掉落概率
-	// 经验值
-	exp int32
-	// 金币
-	gold int32
+	dropItems map[int32]float32 // 物品ID -> 掉落概率
+	exp       int32             // 经验值
+	gold      int32             // 金币
 }
 
 // Init 初始化掉落配置组件
@@ -86,6 +144,36 @@ func (dc *DropConfig) SetActive(active bool) {
 	dc.BaseComponent.SetActive(active)
 }
 
+// GetDropItems 获取掉落物品
+func (dc *DropConfig) GetDropItems() map[int32]float32 {
+	return dc.dropItems
+}
+
+// SetDropItems 设置掉落物品
+func (dc *DropConfig) SetDropItems(items map[int32]float32) {
+	dc.dropItems = items
+}
+
+// GetExp 获取经验值
+func (dc *DropConfig) GetExp() int32 {
+	return dc.exp
+}
+
+// SetExp 设置经验值
+func (dc *DropConfig) SetExp(exp int32) {
+	dc.exp = exp
+}
+
+// GetGold 获取金币
+func (dc *DropConfig) GetGold() int32 {
+	return dc.gold
+}
+
+// SetGold 设置金币
+func (dc *DropConfig) SetGold(gold int32) {
+	dc.gold = gold
+}
+
 // NewMonster 创建新的怪物对象
 func NewMonster(id uint64, name string) *Monster {
 	// 创建基础生命对象
@@ -93,11 +181,13 @@ func NewMonster(id uint64, name string) *Monster {
 
 	// 创建AI行为组件
 	aiBehavior := &AIBehavior{
-		BaseComponent:   component.NewBaseComponent("ai"),
-		state:           "patrol",
-		perceptionRange: 10.0,
-		chaseRange:      20.0,
-		runawayRange:    5.0,
+		BaseComponent:      component.NewBaseComponent("ai"),
+		state:              "patrol", // 默认巡逻状态
+		patrolPath:         make([]object.Vector3, 0),
+		currentPatrolPoint: 0,
+		perceptionRange:    10.0,
+		chaseRange:         15.0,
+		runawayRange:       5.0,
 	}
 
 	// 创建掉落配置组件
@@ -110,7 +200,7 @@ func NewMonster(id uint64, name string) *Monster {
 
 	// 创建怪物对象
 	monster := &Monster{
-		LivingObject: *livingObj,
+		LivingObject: livingObj,
 		aiBehavior:   aiBehavior,
 		dropConfig:   dropConfig,
 	}
@@ -124,5 +214,15 @@ func NewMonster(id uint64, name string) *Monster {
 
 // GetType 获取怪物类型
 func (m *Monster) GetType() int {
-	return object.GameObjectTypeMonster
+	return int(common.GameObjectTypeMonster)
+}
+
+// GetAIBehavior 获取AI行为
+func (m *Monster) GetAIBehavior() *AIBehavior {
+	return m.aiBehavior
+}
+
+// GetDropConfig 获取掉落配置
+func (m *Monster) GetDropConfig() *DropConfig {
+	return m.dropConfig
 }

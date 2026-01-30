@@ -4,14 +4,15 @@ import (
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/dao"
+	"github.com/pzqf/zGameServer/db/repository"
 )
 
 // DBManager 数据库管理器
 type DBManager struct {
-	connectors   map[string]connector.DBConnector
-	CharacterDAO *dao.CharacterDAO
-	AccountDAO   *dao.AccountDAO
-	LoginLogDAO  *dao.LoginLogDAO
+	connectors          map[string]connector.DBConnector
+	CharacterRepository repository.CharacterRepository
+	AccountRepository   repository.AccountRepository
+	LoginLogRepository  repository.LoginLogRepository
 }
 
 // NewDBManager 创建数据库管理器实例
@@ -21,7 +22,7 @@ func NewDBManager() *DBManager {
 	}
 }
 
-// Init 初始化数据库连接和所有DAO
+// Init 初始化数据库连接和所有Repository
 func (manager *DBManager) Init() error {
 	// 获取所有数据库配置
 	dbConfigs := config.GetAllDBConfigs()
@@ -44,19 +45,16 @@ func (manager *DBManager) Init() error {
 	}
 
 	// 初始化所有DAO
-	// CharacterDAO使用game数据库
-	if gameConn, ok := manager.connectors["game"]; ok {
-		manager.CharacterDAO = dao.NewCharacterDAO(gameConn)
-	}
+	var accountDAO *dao.AccountDAO
 
 	// AccountDAO使用account数据库
 	if accountConn, ok := manager.connectors["account"]; ok {
-		manager.AccountDAO = dao.NewAccountDAO(accountConn)
+		accountDAO = dao.NewAccountDAO(accountConn)
 	}
 
-	// LoginLogDAO使用log数据库
-	if logConn, ok := manager.connectors["log"]; ok {
-		manager.LoginLogDAO = dao.NewLoginLogDAO(logConn)
+	// 初始化所有Repository
+	if accountDAO != nil {
+		manager.AccountRepository = repository.NewAccountRepository(accountDAO)
 	}
 
 	return nil

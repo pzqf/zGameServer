@@ -33,16 +33,16 @@ func (ptl *PetTableLoader) Load(dir string) error {
 
 	err := ReadExcelFile(config, dir, func(row []string) error {
 		pet := &models.Pet{
-			PetID:         StrToInt32(row[0]),
-			Name:          row[1],
-			Type:          StrToInt32(row[2]),
-			BaseHP:        StrToInt32(row[3]),
-			BaseAttack:    StrToInt32(row[4]),
-			BaseDefense:   StrToInt32(row[5]),
-			GrowthRate:    StrToFloat32(row[6]),
-			SkillID:       StrToInt32(row[7]),
-			ObtainMethod:  row[8],
-			Rarity:        StrToInt32(row[9]),
+			PetID:        StrToInt32(row[0]),
+			Name:         row[1],
+			Type:         StrToInt32(row[2]),
+			BaseHP:       StrToInt32(row[3]),
+			BaseAttack:   StrToInt32(row[4]),
+			BaseDefense:  StrToInt32(row[5]),
+			GrowthRate:   StrToFloat32(row[6]),
+			SkillID:      StrToInt32(row[7]),
+			ObtainMethod: row[8],
+			Rarity:       StrToInt32(row[9]),
 		}
 
 		tempPets[pet.PetID] = pet

@@ -116,7 +116,7 @@ func NewMySQLConnector(name string, capacity int) *MySQLConnector {
 }
 
 // Init 初始化MySQL数据库连接
-func (c *MySQLConnector) Init(dbConfig config.DBConfig) {
+func (c *MySQLConnector) Init(dbConfig config.DBConfig) error {
 	c.dbConfig = dbConfig
 	c.driver = dbConfig.Driver
 
@@ -135,7 +135,7 @@ func (c *MySQLConnector) Init(dbConfig config.DBConfig) {
 	c.db, err = sql.Open("mysql", dsn)
 	if err != nil {
 		zLog.Error("Failed to open MySQL connection", zap.Error(err))
-		return
+		return err
 	}
 
 	// 配置连接池
@@ -146,7 +146,7 @@ func (c *MySQLConnector) Init(dbConfig config.DBConfig) {
 	// 测试连接
 	if err := c.db.Ping(); err != nil {
 		zLog.Error("Failed to ping MySQL database", zap.Error(err))
-		return
+		return err
 	}
 
 	zLog.Info("MySQL connection established",
@@ -154,6 +154,8 @@ func (c *MySQLConnector) Init(dbConfig config.DBConfig) {
 		zap.Int("port", dbConfig.Port),
 		zap.String("dbname", dbConfig.DBName),
 	)
+
+	return nil
 }
 
 // Start 启动MySQL数据库连接和查询处理协程

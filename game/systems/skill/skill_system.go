@@ -4,8 +4,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zGameServer/config/models"
 	"github.com/pzqf/zGameServer/config/tables"
-	"github.com/pzqf/zGameServer/game/systems/property"
+	"github.com/pzqf/zGameServer/game/common"
 )
 
 // Skill 技能数据结构
@@ -25,56 +27,27 @@ type Skill struct {
 
 // SkillState 技能状态
 type SkillState struct {
-	ownerID   uint64
+	mu        sync.RWMutex
 	skills    map[int32]*Skill
 	cooldowns map[int32]time.Time
+	skillPool *zObject.GenericPool
 }
 
-// SkillSystem 技能系统
-type SkillSystem struct {
-	mu          sync.RWMutex
-	skillStates map[uint64]*SkillState
-}
-
-// GlobalSkillSystem 全局技能系统实例
-var GlobalSkillSystem *SkillSystem
-
-// init 初始化全局技能系统
-func init() {
-	GlobalSkillSystem = &SkillSystem{
-		skillStates: make(map[uint64]*SkillState),
+func NewSkillState() *SkillState {
+	return &SkillState{
+		skills:    make(map[int32]*Skill),
+		cooldowns: make(map[int32]time.Time),
+		skillPool: zObject.NewGenericPool(func() interface{} { return &Skill{} }, 100),
 	}
 }
 
-// LearnSkill 学习技能
-func (ss *SkillSystem) LearnSkill(ownerID uint64, skillID int32) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-
-	// 从配置表获取技能信息
-	skSkill := tables.GetSkillByID(skillID)
-	if skSkill == nil {
+func (state *SkillState) AddSkill(skillID int32, config *models.Skill) {
+	if config == nil {
 		return
 	}
 
-	// 确保技能状态存在
-	if _, exists := ss.skillStates[ownerID]; !exists {
-		ss.skillStates[ownerID] = &SkillState{
-			ownerID:   ownerID,
-			skills:    make(map[int32]*Skill),
-			cooldowns: make(map[int32]time.Time),
-		}
-	}
-
-	// 检查是否已经学习了该技能
-	if _, exists := ss.skillStates[ownerID].skills[skillID]; exists {
-		return
-	}
-
-	// 创建新技能
-	// 转换技能类型为字符串表示
 	skillType := "active"
-	switch skSkill.Type {
+	switch config.Type {
 	case 1:
 		skillType = "active"
 	case 2:
@@ -83,133 +56,72 @@ func (ss *SkillSystem) LearnSkill(ownerID uint64, skillID int32) {
 		skillType = "heal"
 	}
 
-	// 判断目标类型
 	targetType := "single"
-	if skSkill.AreaRadius > 0 {
+	if config.AreaRadius > 0 {
 		targetType = "area"
 	}
 
-	sk := &Skill{
-		ID:          skillID,
-		Level:       1,
-		Name:        skSkill.Name,
-		Description: skSkill.Description,
-		Cooldown:    float32(skSkill.Cooldown),
-		Range:       float32(skSkill.Range),
-		Damage:      float32(skSkill.Damage),
-		ManaCost:    float32(skSkill.ManaCost),
-		Type:        skillType,
-		TargetType:  targetType,
-		LastUsed:    time.Time{},
-	}
+	newSkill := state.skillPool.Get().(*Skill)
+	newSkill.ID = skillID
+	newSkill.Level = 1
+	newSkill.Name = config.Name
+	newSkill.Description = config.Description
+	newSkill.Cooldown = float32(config.Cooldown)
+	newSkill.Range = float32(config.Range)
+	newSkill.Damage = float32(config.Damage)
+	newSkill.ManaCost = float32(config.ManaCost)
+	newSkill.Type = skillType
+	newSkill.TargetType = targetType
+	newSkill.LastUsed = time.Time{}
 
-	ss.skillStates[ownerID].skills[skillID] = sk
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.skills[skillID] = newSkill
 }
 
-// UpgradeSkill 升级技能
-func (ss *SkillSystem) UpgradeSkill(ownerID uint64, skillID int32) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-
-	// 检查技能状态是否存在
-	if _, exists := ss.skillStates[ownerID]; !exists {
-		return
+func (state *SkillState) RemoveSkill(skillID int32) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if skill, exists := state.skills[skillID]; exists {
+		state.skillPool.Put(skill)
+		delete(state.skills, skillID)
 	}
-
-	// 检查是否已经学习了该技能
-	sk, exists := ss.skillStates[ownerID].skills[skillID]
-	if !exists {
-		return
-	}
-
-	// 增加技能等级
-	sk.Level++
-
-	// 从配置表获取技能信息，更新技能属性
-	skSkill := tables.GetSkillByID(skillID)
-	if skSkill != nil {
-		// 根据等级调整技能属性
-		sk.Damage = float32(skSkill.Damage) * (1 + 0.2*float32(sk.Level-1))
-		sk.Cooldown = float32(skSkill.Cooldown)
-		sk.Range = float32(skSkill.Range) * (1 + 0.1*float32(sk.Level-1))
-	}
+	delete(state.cooldowns, skillID)
 }
 
-// CanUseSkill 检查是否可以使用技能
-func (ss *SkillSystem) CanUseSkill(ownerID uint64, skillID int32) bool {
-	ss.mu.RLock()
-	defer ss.mu.RUnlock()
+func (state *SkillState) GetSkill(skillID int32) (*Skill, bool) {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	skill, exists := state.skills[skillID]
+	return skill, exists
+}
 
-	// 检查技能状态是否存在
-	if _, exists := ss.skillStates[ownerID]; !exists {
-		return false
+func (state *SkillState) GetAllSkills() map[int32]*Skill {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	result := make(map[int32]*Skill, len(state.skills))
+	for k, v := range state.skills {
+		result[k] = v
 	}
+	return result
+}
 
-	// 检查是否已经学习了该技能
-	sk, exists := ss.skillStates[ownerID].skills[skillID]
+func (state *SkillState) CanUseSkill(skillID int32, mana float32) bool {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+
+	skill, exists := state.skills[skillID]
 	if !exists {
 		return false
 	}
 
-	// 检查冷却时间
-	if lastUsed, exists := ss.skillStates[ownerID].cooldowns[skillID]; exists {
-		elapsed := time.Since(lastUsed).Seconds()
-		if elapsed < float64(sk.Cooldown) {
-			return false
-		}
-	}
-
-	// 检查魔法消耗
-	mana := property.GlobalPropertySystem.GetProperty(ownerID, "mana")
-	if mana < sk.ManaCost {
-		return false
-	}
-
-	return true
-}
-
-// UseSkill 使用技能
-func (ss *SkillSystem) UseSkill(ownerID uint64, skillID int32) bool {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-
-	// 检查是否可以使用技能
-	if _, exists := ss.skillStates[ownerID]; !exists {
-		return false
-	}
-
-	sk, exists := ss.skillStates[ownerID].skills[skillID]
-	if !exists {
-		return false
-	}
-
-	// 检查冷却时间和魔法消耗
-	if !ss.checkSkillConditionsLocked(ownerID, sk) {
-		return false
-	}
-
-	// 设置冷却时间
-	ss.skillStates[ownerID].cooldowns[skillID] = time.Now()
-	sk.LastUsed = time.Now()
-
-	// 消耗魔法
-	property.GlobalPropertySystem.SubProperty(ownerID, "mana", sk.ManaCost)
-
-	return true
-}
-
-// checkSkillConditionsLocked 检查技能使用条件（内部方法，已加锁）
-func (ss *SkillSystem) checkSkillConditionsLocked(ownerID uint64, skill *Skill) bool {
-	// 检查冷却时间
-	if lastUsed, exists := ss.skillStates[ownerID].cooldowns[skill.ID]; exists {
+	if lastUsed, exists := state.cooldowns[skillID]; exists {
 		elapsed := time.Since(lastUsed).Seconds()
 		if elapsed < float64(skill.Cooldown) {
 			return false
 		}
 	}
 
-	// 检查魔法消耗
-	mana := property.GlobalPropertySystem.GetProperty(ownerID, "mana")
 	if mana < skill.ManaCost {
 		return false
 	}
@@ -217,31 +129,138 @@ func (ss *SkillSystem) checkSkillConditionsLocked(ownerID uint64, skill *Skill) 
 	return true
 }
 
-// GetSkill 获取技能
-func (ss *SkillSystem) GetSkill(ownerID uint64, skillID int32) (*Skill, bool) {
-	ss.mu.RLock()
-	defer ss.mu.RUnlock()
+func (state *SkillState) UseSkill(skillID int32) bool {
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
-	if _, exists := ss.skillStates[ownerID]; !exists {
-		return nil, false
+	skill, exists := state.skills[skillID]
+	if !exists {
+		return false
 	}
 
-	sk, exists := ss.skillStates[ownerID].skills[skillID]
-	return sk, exists
+	if lastUsed, exists := state.cooldowns[skillID]; exists {
+		elapsed := time.Since(lastUsed).Seconds()
+		if elapsed < float64(skill.Cooldown) {
+			return false
+		}
+	}
+
+	state.cooldowns[skillID] = time.Now()
+	skill.LastUsed = time.Now()
+	return true
 }
 
-// GetAllSkills 获取所有技能
-func (ss *SkillSystem) GetAllSkills(ownerID uint64) map[int32]*Skill {
-	ss.mu.RLock()
-	defer ss.mu.RUnlock()
+func (state *SkillState) UpgradeSkill(skillID int32) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
-	if _, exists := ss.skillStates[ownerID]; !exists {
-		return make(map[int32]*Skill)
+	skill, exists := state.skills[skillID]
+	if !exists {
+		return
 	}
 
-	result := make(map[int32]*Skill, len(ss.skillStates[ownerID].skills))
-	for k, v := range ss.skillStates[ownerID].skills {
-		result[k] = v
+	skill.Level++
+
+	if config := tables.GetSkillByID(skillID); config != nil {
+		skill.Damage = float32(config.Damage) * (1 + 0.2*float32(skill.Level-1))
+		skill.Range = float32(config.Range) * (1 + 0.1*float32(skill.Level-1))
 	}
-	return result
+}
+
+// SkillComponent 技能组件
+type SkillComponent struct {
+	mu         sync.RWMutex
+	skillState *SkillState
+	owner      common.IGameObject
+}
+
+func NewSkillComponent(owner common.IGameObject) *SkillComponent {
+	return &SkillComponent{
+		skillState: NewSkillState(),
+		owner:      owner,
+	}
+}
+
+func (sc *SkillComponent) LearnSkill(skillID int32) {
+	if sc.owner == nil {
+		return
+	}
+
+	skillConfig := tables.GetSkillByID(skillID)
+	if skillConfig == nil {
+		return
+	}
+
+	sc.skillState.AddSkill(skillID, skillConfig)
+}
+
+func (sc *SkillComponent) UpgradeSkill(skillID int32) {
+	sc.skillState.UpgradeSkill(skillID)
+}
+
+func (sc *SkillComponent) CanUseSkill(skillID int32) bool {
+	mana := sc.getOwnerMana()
+	return sc.skillState.CanUseSkill(skillID, mana)
+}
+
+func (sc *SkillComponent) UseSkill(skillID int32) bool {
+	if !sc.CanUseSkill(skillID) {
+		return false
+	}
+
+	skill, exists := sc.skillState.GetSkill(skillID)
+	if !exists || skill == nil {
+		return false
+	}
+
+	if sc.skillState.UseSkill(skillID) {
+		sc.subtractMana(skill.ManaCost)
+		return true
+	}
+
+	return false
+}
+
+func (sc *SkillComponent) GetSkill(skillID int32) (*Skill, bool) {
+	return sc.skillState.GetSkill(skillID)
+}
+
+func (sc *SkillComponent) GetAllSkills() map[int32]*Skill {
+	return sc.skillState.GetAllSkills()
+}
+
+func (sc *SkillComponent) Update(deltaTime float64) {
+	// 技能组件不需要定期更新
+}
+
+func (sc *SkillComponent) getOwnerMana() float32 {
+	if sc.owner == nil {
+		return 0
+	}
+	if propertyComponent := sc.getOwnerPropertyComponent(); propertyComponent != nil {
+		if prop, ok := propertyComponent.(interface{ GetProperty(name string) float32 }); ok {
+			return prop.GetProperty("mana")
+		}
+	}
+	return 0
+}
+
+func (sc *SkillComponent) subtractMana(amount float32) {
+	if sc.owner == nil {
+		return
+	}
+	if propertyComponent := sc.getOwnerPropertyComponent(); propertyComponent != nil {
+		if prop, ok := propertyComponent.(interface {
+			SubProperty(name string, value float32)
+		}); ok {
+			prop.SubProperty("mana", amount)
+		}
+	}
+}
+
+func (sc *SkillComponent) getOwnerPropertyComponent() interface{} {
+	if sc.owner == nil {
+		return nil
+	}
+	return sc.owner.GetComponent("property")
 }

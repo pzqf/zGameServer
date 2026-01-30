@@ -20,7 +20,7 @@ type DBQuery struct {
 // DBConnector 数据库连接器接口
 type DBConnector interface {
 	// Init 初始化数据库连接
-	Init(dbConfig config.DBConfig)
+	Init(dbConfig config.DBConfig) error
 	// Start 启动数据库连接
 	Start() error
 	// Query 执行查询操作

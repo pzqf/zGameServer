@@ -5,7 +5,7 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zService"
-	"github.com/pzqf/zGameServer/util"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -18,7 +18,7 @@ type PlayerService struct {
 
 func NewPlayerService() *PlayerService {
 	ps := &PlayerService{
-		BaseService:   *zService.NewBaseService(util.ServiceIdPlayer),
+		BaseService:   *zService.NewBaseService(common.ServiceIdPlayer),
 		playerActors:  zMap.NewMap(),
 		sessionPlayer: zMap.NewMap(),
 	}

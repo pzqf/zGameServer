@@ -18,7 +18,7 @@ const (
 
 // NPC 非玩家角色类
 type NPC struct {
-	object.LivingObject
+	*object.LivingObject
 	aiBehavior   *AIBehavior
 	npcType      int
 	interaction  *InteractionSystem
@@ -49,83 +49,159 @@ func (ai *AIBehavior) Init() error {
 func (ai *AIBehavior) Update(deltaTime float64) {
 }
 
-// Destroy 销毁AI行为组件
-func (ai *AIBehavior) Destroy() {
+// GetState 获取AI状态
+func (ai *AIBehavior) GetState() string {
+	return ai.state
 }
 
-// IsActive 检查AI行为组件是否激活
-func (ai *AIBehavior) IsActive() bool {
-	return ai.BaseComponent.IsActive()
+// SetState 设置AI状态
+func (ai *AIBehavior) SetState(state string) {
+	ai.state = state
 }
 
-// SetActive 设置AI行为组件是否激活
-func (ai *AIBehavior) SetActive(active bool) {
-	ai.BaseComponent.SetActive(active)
+// GetPerceptionRange 获取感知范围
+func (ai *AIBehavior) GetPerceptionRange() float32 {
+	return ai.perceptionRange
 }
 
-// InteractionSystem NPC交互系统
+// SetPerceptionRange 设置感知范围
+func (ai *AIBehavior) SetPerceptionRange(range_ float32) {
+	ai.perceptionRange = range_
+}
+
+// GetPatrolPath 获取巡逻路径
+func (ai *AIBehavior) GetPatrolPath() []object.Vector3 {
+	return ai.patrolPath
+}
+
+// SetPatrolPath 设置巡逻路径
+func (ai *AIBehavior) SetPatrolPath(path []object.Vector3) {
+	ai.patrolPath = path
+}
+
+// GetCurrentPatrolPoint 获取当前巡逻点
+func (ai *AIBehavior) GetCurrentPatrolPoint() int {
+	return ai.currentPatrolPoint
+}
+
+// SetCurrentPatrolPoint 设置当前巡逻点
+func (ai *AIBehavior) SetCurrentPatrolPoint(point int) {
+	ai.currentPatrolPoint = point
+}
+
+// IsMovable 检查是否可移动
+func (ai *AIBehavior) IsMovable() bool {
+	return ai.isMovable
+}
+
+// SetMovable 设置是否可移动
+func (ai *AIBehavior) SetMovable(movable bool) {
+	ai.isMovable = movable
+}
+
+// InteractionSystem 交互系统
 type InteractionSystem struct {
 	*component.BaseComponent
-	// 交互距离
 	interactDistance float32
-	// 可交互状态
-	isInteractable bool
-	// 交互类型：对话、交易、任务
-	interactionType string
+	isInteractable   bool
+	interactionType  string
 }
 
-// Init 初始化交互系统组件
-func (is *InteractionSystem) Init() error {
+// Init 初始化交互系统
+func (isys *InteractionSystem) Init() error {
 	return nil
 }
 
-// Update 更新交互系统组件
-func (is *InteractionSystem) Update(deltaTime float64) {
+// Update 更新交互系统
+func (isys *InteractionSystem) Update(deltaTime float64) {
 }
 
-// Destroy 销毁交互系统组件
-func (is *InteractionSystem) Destroy() {
+// GetInteractDistance 获取交互距离
+func (isys *InteractionSystem) GetInteractDistance() float32 {
+	return isys.interactDistance
 }
 
-// IsActive 检查交互系统组件是否激活
-func (is *InteractionSystem) IsActive() bool {
-	return is.BaseComponent.IsActive()
+// SetInteractDistance 设置交互距离
+func (isys *InteractionSystem) SetInteractDistance(distance float32) {
+	isys.interactDistance = distance
 }
 
-// SetActive 设置交互系统组件是否激活
-func (is *InteractionSystem) SetActive(active bool) {
-	is.BaseComponent.SetActive(active)
+// IsInteractable 检查是否可交互
+func (isys *InteractionSystem) IsInteractable() bool {
+	return isys.isInteractable
 }
 
-// DialogueTree NPC对话树
+// SetInteractable 设置是否可交互
+func (isys *InteractionSystem) SetInteractable(interactable bool) {
+	isys.isInteractable = interactable
+}
+
+// GetInteractionType 获取交互类型
+func (isys *InteractionSystem) GetInteractionType() string {
+	return isys.interactionType
+}
+
+// SetInteractionType 设置交互类型
+func (isys *InteractionSystem) SetInteractionType(interactionType string) {
+	isys.interactionType = interactionType
+}
+
+// DialogueTree 对话树
 type DialogueTree struct {
 	*component.BaseComponent
-	// 对话ID
-	dialogueId int32
-	// 对话内容
-	dialogueContent string
-	// 对话选项
-	dialogueOptions []string
-	// 对话分支
+	dialogueId       int32
+	dialogueContent  string
+	dialogueOptions  []string
 	dialogueBranches map[int]int32
 }
 
-// Init 初始化对话树组件
+// Init 初始化对话树
 func (dt *DialogueTree) Init() error {
 	return nil
 }
 
-// Update 更新对话树组件
+// Update 更新对话树
 func (dt *DialogueTree) Update(deltaTime float64) {
 }
 
-// Destroy 销毁对话树组件
-func (dt *DialogueTree) Destroy() {
+// GetDialogueId 获取对话ID
+func (dt *DialogueTree) GetDialogueId() int32 {
+	return dt.dialogueId
 }
 
-// IsActive 检查对话树组件是否激活
-func (dt *DialogueTree) IsActive() bool {
-	return dt.BaseComponent.IsActive()
+// SetDialogueId 设置对话ID
+func (dt *DialogueTree) SetDialogueId(dialogueId int32) {
+	dt.dialogueId = dialogueId
+}
+
+// GetDialogueContent 获取对话内容
+func (dt *DialogueTree) GetDialogueContent() string {
+	return dt.dialogueContent
+}
+
+// SetDialogueContent 设置对话内容
+func (dt *DialogueTree) SetDialogueContent(content string) {
+	dt.dialogueContent = content
+}
+
+// GetDialogueOptions 获取对话选项
+func (dt *DialogueTree) GetDialogueOptions() []string {
+	return dt.dialogueOptions
+}
+
+// SetDialogueOptions 设置对话选项
+func (dt *DialogueTree) SetDialogueOptions(options []string) {
+	dt.dialogueOptions = options
+}
+
+// GetDialogueBranches 获取对话分支
+func (dt *DialogueTree) GetDialogueBranches() map[int]int32 {
+	return dt.dialogueBranches
+}
+
+// SetDialogueBranches 设置对话分支
+func (dt *DialogueTree) SetDialogueBranches(branches map[int]int32) {
+	dt.dialogueBranches = branches
 }
 
 // SetActive 设置对话树组件是否激活
@@ -167,7 +243,7 @@ func NewNPC(id uint64, name string, npcType int) *NPC {
 
 	// 创建NPC对象
 	npc := &NPC{
-		LivingObject: *livingObj,
+		LivingObject: livingObj,
 		aiBehavior:   aiBehavior,
 		npcType:      npcType,
 		interaction:  interaction,
@@ -197,34 +273,9 @@ func (n *NPC) GetAIState() string {
 	return n.aiBehavior.state
 }
 
-// GetType 获取NPC类型
-func (n *NPC) GetType() int {
-	return object.GameObjectTypeNPC
-}
-
-// SetPatrolPath 设置巡逻路径
-func (n *NPC) SetPatrolPath(path []object.Vector3) {
-	n.aiBehavior.patrolPath = path
-	n.aiBehavior.isMovable = true
-}
-
-// StartPatrol 开始巡逻
-func (n *NPC) StartPatrol() {
-	if n.aiBehavior.isMovable && len(n.aiBehavior.patrolPath) > 0 {
-		n.aiBehavior.state = "patrol"
-	}
-}
-
-// StopPatrol 停止巡逻
-func (n *NPC) StopPatrol() {
-	if n.aiBehavior.state == "patrol" {
-		n.aiBehavior.state = "stationary"
-	}
-}
-
-// Interact 与NPC交互
-func (n *NPC) Interact(interactor common.IGameObject) {
-	// TODO: 实现交互逻辑
+// GetInteraction 获取交互系统
+func (n *NPC) GetInteraction() *InteractionSystem {
+	return n.interaction
 }
 
 // GetDialogueTree 获取对话树
@@ -232,21 +283,10 @@ func (n *NPC) GetDialogueTree() *DialogueTree {
 	return n.dialogueTree
 }
 
-// SetDialogueTree 设置对话树
-func (n *NPC) SetDialogueTree(dialogueTree *DialogueTree) {
-	n.dialogueTree = dialogueTree
-}
-
-// Update 更新NPC状态
-func (n *NPC) Update(deltaTime float64) {
-	// 调用父类更新
-	n.LivingObject.Update(deltaTime)
-
-	// 更新AI行为
-	n.updateAI(deltaTime)
-}
-
-// updateAI 更新AI行为
-func (n *NPC) updateAI(deltaTime float64) {
-	// TODO: 实现AI逻辑
+// Interact 交互
+func (n *NPC) Interact(player common.IGameObject) {
+	if n.interaction != nil && n.interaction.isInteractable {
+		// 执行交互逻辑
+		// 这里可以触发对话、交易等交互行为
+	}
 }

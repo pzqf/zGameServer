@@ -1,4 +1,4 @@
-package util
+package common
 
 // ServiceId 服务ID常量定义
 const (

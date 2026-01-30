@@ -8,7 +8,6 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/game/common"
-	"github.com/pzqf/zGameServer/util"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -21,7 +20,7 @@ type MapService struct {
 	zService.BaseService
 	maps        *zMap.Map // 存储所有地图实例，key: int64(mapId), value: *Map
 	objectMap   *zMap.Map // 存储对象到地图的映射，key: int64(objectId), value: int64(mapId)
-	gameObjects *zMap.Map // 存储所有游戏对象，key: int64(objectId), value: object.IGameObject
+	gameObjects *zMap.Map // 存储所有游戏对象，key: int64(objectId), value: common.IGameObject
 	maxMaps     int       // 最大地图数量限制
 }
 
@@ -29,7 +28,7 @@ type MapService struct {
 // 返回初始化完成的地图服务对象
 func NewMapService() *MapService {
 	ms := &MapService{
-		BaseService: *zService.NewBaseService(util.ServiceIdMap),
+		BaseService: *zService.NewBaseService(common.ServiceIdMap),
 		maps:        zMap.NewMap(),
 		objectMap:   zMap.NewMap(),
 		gameObjects: zMap.NewMap(),
@@ -80,18 +79,18 @@ func (ms *MapService) Serve() {
 // filePath: 地图文件路径
 // 返回加载过程中的错误，如果有
 func (ms *MapService) LoadMap(filePath string) error {
-	// 创建地图对象
-	mapObj := NewMap(0, "", 0, 0, 0, 0, 0, 0, false)
+	// 创建地图对象（这里需要从文件加载地图配置，暂时使用默认值）
+	// 实际项目中应该从文件加载地图配置
+	mapID := uint64(time.Now().UnixNano())
+	mapName := filePath // 暂时使用文件路径作为地图名称
+	width := float32(1000)
+	height := float32(1000)
 
-	// 从文件加载地图
-	if err := mapObj.LoadFromFile(filePath); err != nil {
-		zLog.Error("Failed to load map from file", zap.String("file_path", filePath), zap.Error(err))
-		return err
-	}
+	mapObj := NewMap(mapID, mapName, width, height)
 
 	// 存储地图
-	mapId := mapObj.GetId()
-	ms.maps.Store(mapId, mapObj)
+	mapId := mapObj.GetID()
+	ms.maps.Store(int64(mapId), mapObj)
 
 	zLog.Info("Map loaded successfully", zap.Any("mapId", mapId), zap.String("mapName", mapObj.GetName()), zap.String("file_path", filePath))
 	return nil
@@ -144,7 +143,7 @@ func (ms *MapService) syncMaps() {
 		// 同步地图对象的位置和状态
 		// 这里可以实现地图对象的同步逻辑
 		// 由于Map类型没有SyncObjects方法，我们可以简单地打印日志或者实现自己的同步逻辑
-		zLog.Debug("Synchronizing map objects", zap.Any("mapId", mapObj.GetId()))
+		zLog.Debug("Synchronizing map objects", zap.Any("mapId", mapObj.GetID()))
 		return true
 	})
 }

@@ -104,3 +104,18 @@ func StrToFloat32WithError(s string) (float32, error) {
 	}
 	return float32(v), nil
 }
+
+// StrToFloat64 将字符串转换为float64（无错误处理，向后兼容）
+func StrToFloat64(s string) float64 {
+	v, _ := StrToFloat64WithError(s)
+	return v
+}
+
+// StrToFloat64WithError 将字符串转换为float64（带错误处理）
+func StrToFloat64WithError(s string) (float64, error) {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert string '%s' to float64: %w", s, err)
+	}
+	return v, nil
+}

@@ -4,181 +4,249 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pzqf/zGameServer/game/systems/property"
+	"github.com/pzqf/zGameServer/game/common"
 )
 
 // CombatState 战斗状态
 type CombatState struct {
-	ownerID       uint64
+	mu            sync.RWMutex
 	targetID      uint64
 	inCombat      bool
 	lastCombat    time.Time
 	combatTimeout time.Duration
 }
 
-// CombatSystem 战斗系统
-type CombatSystem struct {
-	mu           sync.RWMutex
-	combatStates map[uint64]*CombatState
-	hateList     map[uint64]map[uint64]float32 // key: attackerID, value: map[targetID]hateValue
-}
-
-// GlobalCombatSystem 全局战斗系统实例
-var GlobalCombatSystem *CombatSystem
-
-// init 初始化全局战斗系统
-func init() {
-	GlobalCombatSystem = &CombatSystem{
-		combatStates: make(map[uint64]*CombatState),
-		hateList:     make(map[uint64]map[uint64]float32),
+func NewCombatState() *CombatState {
+	return &CombatState{
+		combatTimeout: 30 * time.Second,
 	}
 }
 
-// GetAttack 获取攻击力
-func (cs *CombatSystem) GetAttack(ownerID uint64) float32 {
-	return property.GlobalPropertySystem.GetProperty(ownerID, "attack")
+func (state *CombatState) StartCombat(targetID uint64) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.targetID = targetID
+	state.inCombat = true
+	state.lastCombat = time.Now()
 }
 
-// GetDefense 获取防御力
-func (cs *CombatSystem) GetDefense(ownerID uint64) float32 {
-	return property.GlobalPropertySystem.GetProperty(ownerID, "defense")
+func (state *CombatState) EndCombat() {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.inCombat = false
+	state.targetID = 0
 }
 
-// StartCombat 开始战斗
-func (cs *CombatSystem) StartCombat(attackerID, targetID uint64) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
+func (state *CombatState) IsInCombat() bool {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return state.inCombat
+}
 
-	// 设置攻击者的战斗状态
-	if _, exists := cs.combatStates[attackerID]; !exists {
-		cs.combatStates[attackerID] = &CombatState{
-			ownerID:       attackerID,
-			combatTimeout: 30 * time.Second,
-		}
+func (state *CombatState) IsCombatExpired() bool {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return time.Since(state.lastCombat) > state.combatTimeout
+}
+
+func (state *CombatState) GetTargetID() uint64 {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return state.targetID
+}
+
+// HateManager 仇恨管理
+type HateManager struct {
+	mu       sync.RWMutex
+	hateList map[uint64]float32 // key: targetID, value: hateValue
+}
+
+func NewHateManager() *HateManager {
+	return &HateManager{
+		hateList: make(map[uint64]float32),
 	}
-
-	cs.combatStates[attackerID].targetID = targetID
-	cs.combatStates[attackerID].inCombat = true
-	cs.combatStates[attackerID].lastCombat = time.Now()
-
-	// 设置目标的战斗状态
-	if _, exists := cs.combatStates[targetID]; !exists {
-		cs.combatStates[targetID] = &CombatState{
-			ownerID:       targetID,
-			combatTimeout: 30 * time.Second,
-		}
-	}
-
-	cs.combatStates[targetID].targetID = attackerID
-	cs.combatStates[targetID].inCombat = true
-	cs.combatStates[targetID].lastCombat = time.Now()
-
-	// 增加仇恨
-	cs.addHate(attackerID, targetID, 100) // 基础仇恨值
 }
 
-// EndCombat 结束战斗
-func (cs *CombatSystem) EndCombat(ownerID uint64) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
-	if state, exists := cs.combatStates[ownerID]; exists {
-		state.inCombat = false
-		state.targetID = 0
-	}
-
-	// 清除仇恨
-	delete(cs.hateList, ownerID)
+func (hm *HateManager) AddHate(targetID uint64, amount float32) {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+	currentHate := hm.hateList[targetID]
+	hm.hateList[targetID] = currentHate + amount
 }
 
-// IsInCombat 检查是否在战斗中
-func (cs *CombatSystem) IsInCombat(ownerID uint64) bool {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
-	if state, exists := cs.combatStates[ownerID]; exists {
-		// 检查战斗超时
-		if time.Since(state.lastCombat) > state.combatTimeout {
-			state.inCombat = false
-			state.targetID = 0
-			return false
-		}
-		return state.inCombat
-	}
-	return false
-}
-
-// GetCurrentTarget 获取当前目标
-func (cs *CombatSystem) GetCurrentTarget(ownerID uint64) uint64 {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-
-	if state, exists := cs.combatStates[ownerID]; exists && state.inCombat {
-		return state.targetID
-	}
-	return 0
-}
-
-// AddHate 增加仇恨
-func (cs *CombatSystem) AddHate(attackerID, targetID uint64, amount float32) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	cs.addHate(attackerID, targetID, amount)
-}
-
-// addHate 内部方法：增加仇恨
-func (cs *CombatSystem) addHate(attackerID, targetID uint64, amount float32) {
-	if _, exists := cs.hateList[targetID]; !exists {
-		cs.hateList[targetID] = make(map[uint64]float32)
-	}
-
-	currentHate := cs.hateList[targetID][attackerID]
-	cs.hateList[targetID][attackerID] = currentHate + amount
-}
-
-// SubHate 减少仇恨
-func (cs *CombatSystem) SubHate(attackerID, targetID uint64, amount float32) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
-	if _, exists := cs.hateList[targetID]; !exists {
-		return
-	}
-
-	currentHate, exists := cs.hateList[targetID][attackerID]
+func (hm *HateManager) SubHate(targetID uint64, amount float32) {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+	currentHate, exists := hm.hateList[targetID]
 	if !exists {
 		return
 	}
 
 	newHate := currentHate - amount
 	if newHate <= 0 {
-		delete(cs.hateList[targetID], attackerID)
-		// 如果仇恨列表为空，删除该目标的仇恨记录
-		if len(cs.hateList[targetID]) == 0 {
-			delete(cs.hateList, targetID)
-		}
+		delete(hm.hateList, targetID)
 	} else {
-		cs.hateList[targetID][attackerID] = newHate
+		hm.hateList[targetID] = newHate
 	}
 }
 
-// ClearHate 清除仇恨
-func (cs *CombatSystem) ClearHate(ownerID uint64) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	delete(cs.hateList, ownerID)
+func (hm *HateManager) ClearHate() {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+	hm.hateList = make(map[uint64]float32)
 }
 
-// CalculateDamage 计算伤害
-func (cs *CombatSystem) CalculateDamage(attackerID, targetID uint64) float32 {
-	attack := cs.GetAttack(attackerID)
-	defense := cs.GetDefense(targetID)
+func (hm *HateManager) GetHighestHateTarget() uint64 {
+	hm.mu.RLock()
+	defer hm.mu.RUnlock()
 
-	// 伤害公式：攻击 - 防御 * 0.5，最小1点伤害
+	highestHate := float32(0)
+	highestTarget := uint64(0)
+
+	for targetID, hate := range hm.hateList {
+		if hate > highestHate {
+			highestHate = hate
+			highestTarget = targetID
+		}
+	}
+
+	return highestTarget
+}
+
+// CombatComponent 战斗组件
+type CombatComponent struct {
+	mu          sync.RWMutex
+	combatState *CombatState
+	hateManager *HateManager
+	owner       common.IGameObject
+}
+
+func NewCombatComponent(owner common.IGameObject) *CombatComponent {
+	return &CombatComponent{
+		combatState: NewCombatState(),
+		hateManager: NewHateManager(),
+		owner:       owner,
+	}
+}
+
+func (cc *CombatComponent) StartCombat(targetID uint64) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	cc.combatState.StartCombat(targetID)
+	cc.hateManager.AddHate(targetID, 100)
+}
+
+func (cc *CombatComponent) EndCombat() {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	cc.combatState.EndCombat()
+	cc.hateManager.ClearHate()
+}
+
+func (cc *CombatComponent) IsInCombat() bool {
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	return cc.combatState.IsInCombat() && !cc.combatState.IsCombatExpired()
+}
+
+func (cc *CombatComponent) GetCurrentTarget() uint64 {
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	return cc.combatState.GetTargetID()
+}
+
+func (cc *CombatComponent) AddHate(targetID uint64, amount float32) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	cc.hateManager.AddHate(targetID, amount)
+}
+
+func (cc *CombatComponent) SubHate(targetID uint64, amount float32) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	cc.hateManager.SubHate(targetID, amount)
+}
+
+func (cc *CombatComponent) GetHighestHateTarget() uint64 {
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	return cc.hateManager.GetHighestHateTarget()
+}
+
+func (cc *CombatComponent) GetAttack() float32 {
+	if cc.owner == nil {
+		return 0
+	}
+	if propertyComponent := cc.getOwnerPropertyComponent(); propertyComponent != nil {
+		if prop, ok := propertyComponent.(interface{ GetProperty(name string) float32 }); ok {
+			return prop.GetProperty("attack")
+		}
+	}
+	return 0
+}
+
+func (cc *CombatComponent) GetDefense() float32 {
+	if cc.owner == nil {
+		return 0
+	}
+	if propertyComponent := cc.getOwnerPropertyComponent(); propertyComponent != nil {
+		if prop, ok := propertyComponent.(interface{ GetProperty(name string) float32 }); ok {
+			return prop.GetProperty("defense")
+		}
+	}
+	return 0
+}
+
+func (cc *CombatComponent) CalculateDamage(target common.IGameObject) float32 {
+	if target == nil || cc.owner == nil {
+		return 0
+	}
+
+	attack := cc.GetAttack()
+	defense := cc.getDefenseFromTarget(target)
+
 	damageValue := float64(attack) - float64(defense)*0.5
 	if damageValue < 1.0 {
 		damageValue = 1.0
 	}
 
 	return float32(damageValue)
+}
+
+func (cc *CombatComponent) Update(deltaTime float64) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	if cc.combatState.IsCombatExpired() && cc.combatState.IsInCombat() {
+		cc.combatState.EndCombat()
+		cc.hateManager.ClearHate()
+	}
+}
+
+func (cc *CombatComponent) getOwnerPropertyComponent() interface{} {
+	if cc.owner == nil {
+		return nil
+	}
+	return cc.owner.GetComponent("property")
+}
+
+func (cc *CombatComponent) getDefenseFromTarget(target common.IGameObject) float32 {
+	if target == nil {
+		return 0
+	}
+	if propertyComponent := cc.getTargetPropertyComponent(target); propertyComponent != nil {
+		if prop, ok := propertyComponent.(interface{ GetProperty(name string) float32 }); ok {
+			return prop.GetProperty("defense")
+		}
+	}
+	return 0
+}
+
+func (cc *CombatComponent) getTargetPropertyComponent(target common.IGameObject) interface{} {
+	if target == nil {
+		return nil
+	}
+	return target.GetComponent("property")
 }

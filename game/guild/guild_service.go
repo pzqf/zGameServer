@@ -6,7 +6,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zService"
-	"github.com/pzqf/zGameServer/util"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -22,7 +22,7 @@ type GuildService struct {
 
 func NewGuildService() *GuildService {
 	gs := &GuildService{
-		BaseService:  *zService.NewBaseService(util.ServiceIdGuild),
+		BaseService:  *zService.NewBaseService(common.ServiceIdGuild),
 		guilds:       zMap.NewMap(),
 		playerGuild:  zMap.NewMap(),
 		guildNameMap: zMap.NewMap(),

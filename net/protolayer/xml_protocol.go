@@ -7,7 +7,7 @@ import (
 )
 
 // XMLProtocol XML协议实现
-type XMLProtocol struct {}
+type XMLProtocol struct{}
 
 // NewXMLProtocol 创建XML协议实例
 func NewXMLProtocol() *XMLProtocol {

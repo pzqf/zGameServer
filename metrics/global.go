@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -190,6 +191,7 @@ func RegisterBasicMetrics() {
 
 	// 注册业务相关指标
 	businessMetrics := []MetricConfig{
+		// 玩家相关指标
 		{
 			Name:     "player_login_count",
 			Type:     MetricTypeCounter,
@@ -201,6 +203,13 @@ func RegisterBasicMetrics() {
 			Name:     "player_logout_count",
 			Type:     MetricTypeCounter,
 			Help:     "Number of player logouts",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "player_register_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of player registrations",
 			Category: CategoryBusiness,
 			Labels:   nil,
 		},
@@ -217,7 +226,158 @@ func RegisterBasicMetrics() {
 			Help:     "Player login latency in seconds",
 			Category: CategoryBusiness,
 			Labels:   nil,
-			Buckets:  prometheus.ExponentialBuckets(0.1, 2, 10),
+			Buckets:  []float64{0.1, 0.2, 0.5, 1, 2, 5, 10},
+		},
+		{
+			Name:     "player_session_duration",
+			Type:     MetricTypeHistogram,
+			Help:     "Player session duration in seconds",
+			Category: CategoryBusiness,
+			Labels:   nil,
+			Buckets:  []float64{60, 300, 600, 1800, 3600, 7200, 14400},
+		},
+
+		// 游戏经济相关指标
+		{
+			Name:     "gold_transaction_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of gold transactions",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "gold_transaction_amount",
+			Type:     MetricTypeCounter,
+			Help:     "Total amount of gold transactions",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "item_transaction_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of item transactions",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "auction_transaction_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of auction transactions",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "auction_transaction_amount",
+			Type:     MetricTypeCounter,
+			Help:     "Total amount of auction transactions",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+
+		// 游戏系统相关指标
+		{
+			Name:     "battle_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of battles",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "battle_win_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of battle wins",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "skill_usage_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of skill usages",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "quest_complete_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of quests completed",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "guild_count",
+			Type:     MetricTypeGauge,
+			Help:     "Number of guilds",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+		{
+			Name:     "guild_member_count",
+			Type:     MetricTypeGauge,
+			Help:     "Number of guild members",
+			Category: CategoryBusiness,
+			Labels:   nil,
+		},
+
+		// 服务器性能相关指标
+		{
+			Name:     "memory_usage_mb",
+			Type:     MetricTypeGauge,
+			Help:     "Memory usage in MB",
+			Category: CategorySystem,
+			Labels:   nil,
+		},
+		{
+			Name:     "cpu_usage_percent",
+			Type:     MetricTypeGauge,
+			Help:     "CPU usage percentage",
+			Category: CategorySystem,
+			Labels:   nil,
+		},
+		{
+			Name:     "gc_count",
+			Type:     MetricTypeCounter,
+			Help:     "Number of garbage collections",
+			Category: CategorySystem,
+			Labels:   nil,
+		},
+		{
+			Name:     "gc_duration_seconds",
+			Type:     MetricTypeCounter,
+			Help:     "Total duration of garbage collections in seconds",
+			Category: CategorySystem,
+			Labels:   nil,
+		},
+		{
+			Name:     "goroutine_count",
+			Type:     MetricTypeGauge,
+			Help:     "Number of goroutines",
+			Category: CategorySystem,
+			Labels:   nil,
+		},
+
+		// 网络相关指标扩展
+		{
+			Name:     "packet_processing_time",
+			Type:     MetricTypeHistogram,
+			Help:     "Packet processing time in seconds",
+			Category: CategoryNetwork,
+			Labels:   nil,
+			Buckets:  []float64{0.001, 0.01, 0.1, 0.5, 1, 2, 5},
+		},
+		{
+			Name:     "request_queue_length",
+			Type:     MetricTypeGauge,
+			Help:     "Length of request queue",
+			Category: CategoryNetwork,
+			Labels:   nil,
+		},
+		{
+			Name:     "response_time",
+			Type:     MetricTypeHistogram,
+			Help:     "Response time in seconds",
+			Category: CategoryNetwork,
+			Labels:   nil,
+			Buckets:  []float64{0.001, 0.01, 0.1, 0.5, 1, 2, 5},
 		},
 	}
 
@@ -226,4 +386,25 @@ func RegisterBasicMetrics() {
 
 	// 使用标准库log记录日志，避免循环依赖
 	log.Println("Basic Prometheus metrics registered successfully")
+}
+
+// ValidateMetricName 验证指标名称是否合法
+func ValidateMetricName(name string) error {
+	if name == "" {
+		return fmt.Errorf("metric name cannot be empty")
+	}
+
+	// 简单的指标名称验证，符合Prometheus规范
+	for _, char := range name {
+		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_' || char == ':') {
+			return fmt.Errorf("metric name contains invalid character: %c", char)
+		}
+	}
+
+	return nil
+}
+
+// GenerateMetricName 生成规范化的指标名称
+func GenerateMetricName(category, name string) string {
+	return fmt.Sprintf("%s_%s", category, name)
 }

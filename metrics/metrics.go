@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -401,11 +400,6 @@ func (m *BusinessMetrics) IncCounter(name string) {
 	defer m.mu.Unlock()
 
 	m.counters[name]++
-
-	// 同步到Prometheus指标
-	if counter := GetCounter(name); counter != nil {
-		counter.Inc()
-	}
 }
 
 // AddCounter 增加计数器指定值
@@ -414,11 +408,6 @@ func (m *BusinessMetrics) AddCounter(name string, value int64) {
 	defer m.mu.Unlock()
 
 	m.counters[name] += value
-
-	// 同步到Prometheus指标
-	if counter := GetCounter(name); counter != nil {
-		counter.Add(float64(value))
-	}
 }
 
 // SetCounter 设置计数器值
@@ -426,16 +415,7 @@ func (m *BusinessMetrics) SetCounter(name string, value int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 计算差值
-	diff := value - m.counters[name]
 	m.counters[name] = value
-
-	// 同步到Prometheus指标
-	if counter := GetCounter(name); counter != nil {
-		if diff > 0 {
-			counter.Add(float64(diff))
-		}
-	}
 }
 
 // GetCounter 获取计数器值
@@ -452,11 +432,6 @@ func (m *BusinessMetrics) RecordTimer(name string, duration time.Duration) {
 	defer m.mu.Unlock()
 
 	m.timers[name] = duration
-
-	// 同步到Prometheus指标
-	if histogram := GetHistogram(name); histogram != nil {
-		histogram.Observe(duration.Seconds())
-	}
 }
 
 // GetTimer 获取计时器值
@@ -503,25 +478,4 @@ func (m *BusinessMetrics) Reset() {
 	m.counters = make(map[string]int64)
 	m.timers = make(map[string]time.Duration)
 	m.lastSampleTime = time.Now()
-}
-
-// ValidateMetricName 验证指标名称是否合法
-func ValidateMetricName(name string) error {
-	if name == "" {
-		return fmt.Errorf("metric name cannot be empty")
-	}
-
-	// 简单的指标名称验证，符合Prometheus规范
-	for _, char := range name {
-		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_' || char == ':') {
-			return fmt.Errorf("metric name contains invalid character: %c", char)
-		}
-	}
-
-	return nil
-}
-
-// GenerateMetricName 生成规范化的指标名称
-func GenerateMetricName(category, name string) string {
-	return fmt.Sprintf("%s_%s", category, name)
 }

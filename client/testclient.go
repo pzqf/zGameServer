@@ -68,7 +68,7 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Account login response: %+v\n", loginResp)
+	fmt.Printf("Account login response: Success=%v, Message=%s\n", loginResp.Success, loginResp.ErrorMsg)
 
 	if loginResp.Success {
 		// 检查是否有角色
@@ -118,7 +118,7 @@ func main() {
 				return
 			}
 
-			fmt.Printf("Character create response: %+v\n", charCreateResp)
+			fmt.Printf("Character create response: Success=%v, Message=%s\n", charCreateResp.Success, charCreateResp.ErrorMsg)
 
 			if charCreateResp.Success {
 				characterId = charCreateResp.Character.CharacterId
@@ -169,7 +169,7 @@ func main() {
 			return
 		}
 
-		fmt.Printf("Character login response: %+v\n", charLoginResp)
+		fmt.Printf("Character login response: Success=%v, Message=%s\n", charLoginResp.Success, charLoginResp.ErrorMsg)
 
 		// 等待一段时间
 		time.Sleep(2 * time.Second)
@@ -215,7 +215,7 @@ func main() {
 			return
 		}
 
-		fmt.Printf("Character logout response: %+v\n", charLogoutResp)
+		fmt.Printf("Character logout response: Success=%v, Message=%s\n", charLogoutResp.Success, charLogoutResp.ErrorMsg)
 	}
 
 	fmt.Println("Test completed!")

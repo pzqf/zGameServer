@@ -1,39 +1,105 @@
 package tables
 
 import (
+	"sync"
+
 	"github.com/pzqf/zGameServer/config/models"
 )
 
+// MapTableLoader 地图表加载器
+type MapTableLoader struct {
+	mu             sync.RWMutex
+	maps           map[int32]*models.Map
+	spawnPoints    map[int32]*models.MapSpawnPoint
+	teleportPoints map[int32]*models.MapTeleportPoint
+	buildings      map[int32]*models.MapBuilding
+	events         map[int32]*models.MapEvent
+	resources      map[int32]*models.MapResource
+}
+
+// NewMapTableLoader 创建地图表加载器
+func NewMapTableLoader() *MapTableLoader {
+	return &MapTableLoader{
+		maps:           make(map[int32]*models.Map),
+		spawnPoints:    make(map[int32]*models.MapSpawnPoint),
+		teleportPoints: make(map[int32]*models.MapTeleportPoint),
+		buildings:      make(map[int32]*models.MapBuilding),
+		events:         make(map[int32]*models.MapEvent),
+		resources:      make(map[int32]*models.MapResource),
+	}
+}
+
 // Load 加载地图表数据
 func (mtl *MapTableLoader) Load(dir string) error {
+	// 加载地图基本信息
+	if err := mtl.loadMaps(dir); err != nil {
+		return err
+	}
+
+	// 加载生成点
+	if err := mtl.loadSpawnPoints(dir); err != nil {
+		return err
+	}
+
+	// 加载传送点
+	if err := mtl.loadTeleportPoints(dir); err != nil {
+		return err
+	}
+
+	// 加载建筑物
+	if err := mtl.loadBuildings(dir); err != nil {
+		return err
+	}
+
+	// 加载事件
+	if err := mtl.loadEvents(dir); err != nil {
+		return err
+	}
+
+	// 加载资源
+	if err := mtl.loadResources(dir); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// loadMaps 加载地图基本信息
+func (mtl *MapTableLoader) loadMaps(dir string) error {
 	config := ExcelConfig{
 		FileName:   "map.xlsx",
-		SheetName:  "Sheet1",
-		MinColumns: 9,
+		SheetName:  "Maps",
+		MinColumns: 15,
 		TableName:  "maps",
 	}
 
-	// 使用临时map批量加载数据，减少锁竞争
 	tempMaps := make(map[int32]*models.Map)
 
 	err := ReadExcelFile(config, dir, func(row []string) error {
-		mapData := &models.Map{
-			MapID:         StrToInt32(row[0]),
-			Name:          row[1],
-			Width:         StrToInt32(row[2]),
-			Height:        StrToInt32(row[3]),
-			MaxPlayer:     StrToInt32(row[4]),
-			MonsterConfig: row[5],
-			TerrainData:   row[6],
-			RespawnPointX: StrToFloat32(row[7]),
-			RespawnPointY: StrToFloat32(row[8]),
+		m := &models.Map{
+			MapID:       StrToInt32(row[0]),
+			Name:        row[1],
+			MapType:     StrToInt32(row[2]),
+			Width:       StrToInt32(row[3]),
+			Height:      StrToInt32(row[4]),
+			RegionSize:  StrToInt32(row[5]),
+			TileWidth:   StrToInt32(row[6]),
+			TileHeight:  StrToInt32(row[7]),
+			IsInstance:  StrToBool(row[8]),
+			MaxPlayers:  StrToInt32(row[9]),
+			Description: row[10],
+			Background:  row[11],
+			Music:       row[12],
+			WeatherType: row[13],
+			MinLevel:    StrToInt32(row[14]),
+			MaxLevel:    StrToInt32(row[15]),
+			RespawnRate: StrToFloat64(row[16]),
 		}
 
-		tempMaps[mapData.MapID] = mapData
+		tempMaps[m.MapID] = m
 		return nil
 	})
 
-	// 批量写入到目标map，只需加一次锁
 	if err == nil {
 		mtl.mu.Lock()
 		mtl.maps = tempMaps
@@ -43,27 +109,292 @@ func (mtl *MapTableLoader) Load(dir string) error {
 	return err
 }
 
-// GetTableName 获取表格名称
-func (mtl *MapTableLoader) GetTableName() string {
-	return "maps"
+// loadSpawnPoints 加载生成点
+func (mtl *MapTableLoader) loadSpawnPoints(dir string) error {
+	config := ExcelConfig{
+		FileName:   "map.xlsx",
+		SheetName:  "SpawnPoints",
+		MinColumns: 10,
+		TableName:  "spawn_points",
+	}
+
+	tempSpawnPoints := make(map[int32]*models.MapSpawnPoint)
+
+	err := ReadExcelFile(config, dir, func(row []string) error {
+		sp := &models.MapSpawnPoint{
+			ID:        StrToInt32(row[0]),
+			MapID:     StrToInt32(row[1]),
+			Type:      row[2],
+			ObjectID:  StrToInt32(row[3]),
+			X:         StrToFloat64(row[4]),
+			Y:         StrToFloat64(row[5]),
+			Z:         StrToFloat64(row[6]),
+			Name:      row[7],
+			Frequency: StrToInt32(row[8]),
+			GroupID:   StrToInt32(row[9]),
+		}
+
+		tempSpawnPoints[sp.ID] = sp
+		return nil
+	})
+
+	if err == nil {
+		mtl.mu.Lock()
+		mtl.spawnPoints = tempSpawnPoints
+		mtl.mu.Unlock()
+	}
+
+	return err
+}
+
+// loadTeleportPoints 加载传送点
+func (mtl *MapTableLoader) loadTeleportPoints(dir string) error {
+	config := ExcelConfig{
+		FileName:   "map.xlsx",
+		SheetName:  "TeleportPoints",
+		MinColumns: 13,
+		TableName:  "teleport_points",
+	}
+
+	tempTeleportPoints := make(map[int32]*models.MapTeleportPoint)
+
+	err := ReadExcelFile(config, dir, func(row []string) error {
+		tp := &models.MapTeleportPoint{
+			ID:            StrToInt32(row[0]),
+			MapID:         StrToInt32(row[1]),
+			X:             StrToFloat64(row[2]),
+			Y:             StrToFloat64(row[3]),
+			Z:             StrToFloat64(row[4]),
+			TargetMapID:   StrToInt32(row[5]),
+			TargetX:       StrToFloat64(row[6]),
+			TargetY:       StrToFloat64(row[7]),
+			TargetZ:       StrToFloat64(row[8]),
+			Name:          row[9],
+			RequiredLevel: StrToInt32(row[10]),
+			RequiredItem:  StrToInt32(row[11]),
+			IsActive:      StrToBool(row[12]),
+		}
+
+		tempTeleportPoints[tp.ID] = tp
+		return nil
+	})
+
+	if err == nil {
+		mtl.mu.Lock()
+		mtl.teleportPoints = tempTeleportPoints
+		mtl.mu.Unlock()
+	}
+
+	return err
+}
+
+// loadBuildings 加载建筑物
+func (mtl *MapTableLoader) loadBuildings(dir string) error {
+	config := ExcelConfig{
+		FileName:   "map.xlsx",
+		SheetName:  "Buildings",
+		MinColumns: 11,
+		TableName:  "buildings",
+	}
+
+	tempBuildings := make(map[int32]*models.MapBuilding)
+
+	err := ReadExcelFile(config, dir, func(row []string) error {
+		b := &models.MapBuilding{
+			ID:      StrToInt32(row[0]),
+			MapID:   StrToInt32(row[1]),
+			X:       StrToFloat64(row[2]),
+			Y:       StrToFloat64(row[3]),
+			Z:       StrToFloat64(row[4]),
+			Width:   StrToFloat64(row[5]),
+			Height:  StrToFloat64(row[6]),
+			Type:    row[7],
+			Name:    row[8],
+			Level:   StrToInt32(row[9]),
+			HP:      StrToInt32(row[10]),
+			Faction: StrToInt32(row[11]),
+		}
+
+		tempBuildings[b.ID] = b
+		return nil
+	})
+
+	if err == nil {
+		mtl.mu.Lock()
+		mtl.buildings = tempBuildings
+		mtl.mu.Unlock()
+	}
+
+	return err
+}
+
+// loadEvents 加载事件
+func (mtl *MapTableLoader) loadEvents(dir string) error {
+	config := ExcelConfig{
+		FileName:   "map.xlsx",
+		SheetName:  "Events",
+		MinColumns: 13,
+		TableName:  "events",
+	}
+
+	tempEvents := make(map[int32]*models.MapEvent)
+
+	err := ReadExcelFile(config, dir, func(row []string) error {
+		e := &models.MapEvent{
+			EventID:     StrToInt32(row[0]),
+			MapID:       StrToInt32(row[1]),
+			Type:        row[2],
+			Name:        row[3],
+			Description: row[4],
+			X:           StrToFloat64(row[5]),
+			Y:           StrToFloat64(row[6]),
+			Z:           StrToFloat64(row[7]),
+			Radius:      StrToFloat64(row[8]),
+			StartTime:   row[9],
+			EndTime:     row[10],
+			Duration:    StrToInt32(row[11]),
+			RewardID:    StrToInt32(row[12]),
+			IsActive:    StrToBool(row[13]),
+		}
+
+		tempEvents[e.EventID] = e
+		return nil
+	})
+
+	if err == nil {
+		mtl.mu.Lock()
+		mtl.events = tempEvents
+		mtl.mu.Unlock()
+	}
+
+	return err
+}
+
+// loadResources 加载资源
+func (mtl *MapTableLoader) loadResources(dir string) error {
+	config := ExcelConfig{
+		FileName:   "map.xlsx",
+		SheetName:  "Resources",
+		MinColumns: 10,
+		TableName:  "resources",
+	}
+
+	tempResources := make(map[int32]*models.MapResource)
+
+	err := ReadExcelFile(config, dir, func(row []string) error {
+		r := &models.MapResource{
+			ResourceID:  StrToInt32(row[0]),
+			MapID:       StrToInt32(row[1]),
+			Type:        row[2],
+			X:           StrToFloat64(row[3]),
+			Y:           StrToFloat64(row[4]),
+			Z:           StrToFloat64(row[5]),
+			RespawnTime: StrToInt32(row[6]),
+			ItemID:      StrToInt32(row[7]),
+			Quantity:    StrToInt32(row[8]),
+			Level:       StrToInt32(row[9]),
+			IsGathering: StrToBool(row[10]),
+		}
+
+		tempResources[r.ResourceID] = r
+		return nil
+	})
+
+	if err == nil {
+		mtl.mu.Lock()
+		mtl.resources = tempResources
+		mtl.mu.Unlock()
+	}
+
+	return err
 }
 
 // GetMap 根据ID获取地图
 func (mtl *MapTableLoader) GetMap(mapID int32) (*models.Map, bool) {
 	mtl.mu.RLock()
+	defer mtl.mu.RUnlock()
 	mapData, ok := mtl.maps[mapID]
-	mtl.mu.RUnlock()
 	return mapData, ok
 }
 
 // GetAllMaps 获取所有地图
 func (mtl *MapTableLoader) GetAllMaps() map[int32]*models.Map {
 	mtl.mu.RLock()
-	// 创建一个副本，避免外部修改内部数据
-	mapsCopy := make(map[int32]*models.Map, len(mtl.maps))
-	for id, mapData := range mtl.maps {
-		mapsCopy[id] = mapData
+	defer mtl.mu.RUnlock()
+	return mtl.maps
+}
+
+// GetSpawnPointsByMapID 根据地图ID获取生成点
+func (mtl *MapTableLoader) GetSpawnPointsByMapID(mapID int32) []*models.MapSpawnPoint {
+	mtl.mu.RLock()
+	defer mtl.mu.RUnlock()
+
+	var spawnPoints []*models.MapSpawnPoint
+	for _, sp := range mtl.spawnPoints {
+		if sp.MapID == mapID {
+			spawnPoints = append(spawnPoints, sp)
+		}
 	}
-	mtl.mu.RUnlock()
-	return mapsCopy
+	return spawnPoints
+}
+
+// GetTeleportPointsByMapID 根据地图ID获取传送点
+func (mtl *MapTableLoader) GetTeleportPointsByMapID(mapID int32) []*models.MapTeleportPoint {
+	mtl.mu.RLock()
+	defer mtl.mu.RUnlock()
+
+	var teleportPoints []*models.MapTeleportPoint
+	for _, tp := range mtl.teleportPoints {
+		if tp.MapID == mapID {
+			teleportPoints = append(teleportPoints, tp)
+		}
+	}
+	return teleportPoints
+}
+
+// GetBuildingsByMapID 根据地图ID获取建筑物
+func (mtl *MapTableLoader) GetBuildingsByMapID(mapID int32) []*models.MapBuilding {
+	mtl.mu.RLock()
+	defer mtl.mu.RUnlock()
+
+	var buildings []*models.MapBuilding
+	for _, b := range mtl.buildings {
+		if b.MapID == mapID {
+			buildings = append(buildings, b)
+		}
+	}
+	return buildings
+}
+
+// GetEventsByMapID 根据地图ID获取事件
+func (mtl *MapTableLoader) GetEventsByMapID(mapID int32) []*models.MapEvent {
+	mtl.mu.RLock()
+	defer mtl.mu.RUnlock()
+
+	var events []*models.MapEvent
+	for _, e := range mtl.events {
+		if e.MapID == mapID {
+			events = append(events, e)
+		}
+	}
+	return events
+}
+
+// GetResourcesByMapID 根据地图ID获取资源
+func (mtl *MapTableLoader) GetResourcesByMapID(mapID int32) []*models.MapResource {
+	mtl.mu.RLock()
+	defer mtl.mu.RUnlock()
+
+	var resources []*models.MapResource
+	for _, r := range mtl.resources {
+		if r.MapID == mapID {
+			resources = append(resources, r)
+		}
+	}
+	return resources
+}
+
+// GetTableName 获取表格名称
+func (mtl *MapTableLoader) GetTableName() string {
+	return "map"
 }

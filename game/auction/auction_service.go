@@ -5,7 +5,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zService"
-	"github.com/pzqf/zGameServer/util"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -23,7 +23,7 @@ type AuctionService struct {
 
 func NewAuctionService() *AuctionService {
 	as := &AuctionService{
-		BaseService:     *zService.NewBaseService(util.ServiceIdAuction),
+		BaseService:     *zService.NewBaseService(common.ServiceIdAuction),
 		items:           zMap.NewMap(),
 		playerItems:     zMap.NewMap(),
 		pendingItems:    make([]int64, 0),

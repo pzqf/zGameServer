@@ -9,8 +9,8 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zGameServer/config"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/metrics"
-	"github.com/pzqf/zGameServer/util"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +33,7 @@ type HTTPService struct {
 // NewHTTPService 创建HTTP服务
 func NewHTTPService() *HTTPService {
 	hs := &HTTPService{
-		BaseService: *zService.NewBaseService(util.ServiceIdHttpServer),
+		BaseService: *zService.NewBaseService(common.ServiceIdHttpServer),
 		routes:      make(RouteMap),
 		mux:         http.NewServeMux(),
 	}
