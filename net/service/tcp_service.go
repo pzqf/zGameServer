@@ -38,9 +38,10 @@ func (ts *TcpService) Init() error {
 
 	serverCfg := config.GetServerConfig()
 	ts.netConfig = &zNet.TcpConfig{
-		ListenAddress:  serverCfg.ListenAddress,
-		ChanSize:       serverCfg.ChanSize,
-		MaxClientCount: serverCfg.MaxClientCount,
+		ListenAddress:     serverCfg.ListenAddress,
+		ChanSize:          serverCfg.ChanSize,
+		MaxClientCount:    serverCfg.MaxClientCount,
+		HeartbeatDuration: serverCfg.HeartbeatDuration,
 	}
 	zLog.Info("Initializing TCP service...", zap.String("listen_address", ts.netConfig.ListenAddress))
 

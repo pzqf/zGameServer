@@ -62,13 +62,13 @@ type CompressionConfig struct {
 
 // ServerConfig 服务器网络配置
 type ServerConfig struct {
-	ListenAddress  string // 监听地址
-	ChanSize       int    // 通道大小
-	MaxClientCount int    // 最大客户端数量
-	Protocol       string // 协议类型: protobuf, json, xml
-	ServerID       int32  // 服务器ID
-	ServerName     string // 服务器名称
-
+	ListenAddress     string // 监听地址
+	ChanSize          int    // 通道大小
+	MaxClientCount    int    // 最大客户端数量
+	Protocol          string // 协议类型: protobuf, json, xml
+	ServerID          int32  // 服务器ID
+	ServerName        string // 服务器名称
+	HeartbeatDuration int    // 心跳时长（秒），0表示禁用心跳
 }
 
 // DBConfig 数据库配置
@@ -200,12 +200,13 @@ func LoadConfig(filePath string) (*Config, error) {
 
 	// 解析服务器配置
 	config.Server = ServerConfig{
-		ListenAddress:  getConfigString(zcfg, "server.listen_address", "0.0.0.0:8888"),
-		ChanSize:       getConfigInt(zcfg, "server.chan_size", 1024),
-		MaxClientCount: getConfigInt(zcfg, "server.max_client_count", 10000),
-		Protocol:       getConfigString(zcfg, "server.protocol", "protobuf"),
-		ServerID:       int32(getConfigInt(zcfg, "server.server_id", 1)),
-		ServerName:     getConfigString(zcfg, "server.server_name", "GameServer"),
+		ListenAddress:     getConfigString(zcfg, "server.listen_address", "0.0.0.0:8888"),
+		ChanSize:          getConfigInt(zcfg, "server.chan_size", 1024),
+		MaxClientCount:    getConfigInt(zcfg, "server.max_client_count", 10000),
+		Protocol:          getConfigString(zcfg, "server.protocol", "protobuf"),
+		ServerID:          int32(getConfigInt(zcfg, "server.server_id", 1)),
+		ServerName:        getConfigString(zcfg, "server.server_name", "GameServer"),
+		HeartbeatDuration: getConfigInt(zcfg, "server.heartbeat_duration", 0),
 	}
 
 	// 解析防DDoS攻击配置
@@ -350,6 +351,14 @@ func (c *Config) Validate() error {
 	}
 	if c.Server.MaxClientCount <= 0 {
 		c.Server.MaxClientCount = 10000
+	}
+	// 验证心跳配置（0表示禁用，10-300秒之间较为合理）
+	if c.Server.HeartbeatDuration < 0 {
+		c.Server.HeartbeatDuration = 0
+	} else if c.Server.HeartbeatDuration > 0 && c.Server.HeartbeatDuration < 10 {
+		c.Server.HeartbeatDuration = 10
+	} else if c.Server.HeartbeatDuration > 300 {
+		c.Server.HeartbeatDuration = 300
 	}
 
 	// 验证防DDOS攻击配置
