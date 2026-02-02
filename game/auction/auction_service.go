@@ -36,14 +36,14 @@ func NewAuctionService() *AuctionService {
 
 func (as *AuctionService) Init() error {
 	as.SetState(zService.ServiceStateInit)
-	zLog.Info("Initializing auction service...")
+	zLog.Info("Initializing auction service...", zap.String("serviceId", as.ServiceId()))
 	// 初始化拍卖行服务相关资源
 	return nil
 }
 
 func (as *AuctionService) Close() error {
 	as.SetState(zService.ServiceStateStopping)
-	zLog.Info("Closing auction service...")
+	zLog.Info("Closing auction service...", zap.String("serviceId", as.ServiceId()))
 	// 清理拍卖行服务相关资源
 	as.items.Clear()
 	as.playerItems.Clear()

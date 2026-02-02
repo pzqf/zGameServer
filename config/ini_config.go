@@ -21,6 +21,13 @@ type Config struct {
 	Compression CompressionConfig
 	DDoS        zNet.DDoSConfig     // 防DDoS攻击配置
 	Databases   map[string]DBConfig // 多数据库配置，key为数据库名称
+	Pprof       PprofConfig         // pprof性能分析配置
+}
+
+// PprofConfig pprof性能分析配置
+type PprofConfig struct {
+	Enabled       bool   // 是否启用pprof功能
+	ListenAddress string // pprof监听地址，格式为IP:端口
 }
 
 // 配置监控器
@@ -33,8 +40,16 @@ type ConfigMonitor struct {
 }
 
 // 全局配置监控器
-var configMonitor *ConfigMonitor
-var once sync.Once
+var (
+	configMonitor *ConfigMonitor
+	monitorOnce   sync.Once
+)
+
+// 全局配置实例
+var (
+	GlobalConfig *Config
+	configOnce   sync.Once
+)
 
 // CompressionConfig 压缩配置
 type CompressionConfig struct {
@@ -73,12 +88,21 @@ type DBConfig struct {
 	ConnectTimeout int    // 连接超时时间（秒，MongoDB）
 }
 
-// GlobalConfig 全局配置实例
-var GlobalConfig *Config
-
 // GetConfig 获取全局配置实例
 func GetConfig() *Config {
 	return GlobalConfig
+}
+
+// InitConfig 初始化配置
+func InitConfig(filePath string) error {
+	var err error
+	configOnce.Do(func() {
+		GlobalConfig, err = LoadConfig(filePath)
+		if err == nil {
+			err = GlobalConfig.Validate()
+		}
+	})
+	return err
 }
 
 // GetServerConfig 获取服务器配置
@@ -148,6 +172,17 @@ func GetCompressionConfig() *CompressionConfig {
 		}
 	}
 	return &GlobalConfig.Compression
+}
+
+// GetPprofConfig 获取pprof配置
+func GetPprofConfig() *PprofConfig {
+	if GlobalConfig == nil {
+		return &PprofConfig{
+			Enabled:       false,
+			ListenAddress: "localhost:6060",
+		}
+	}
+	return &GlobalConfig.Pprof
 }
 
 // LoadConfig 从INI文件加载配置
@@ -267,6 +302,12 @@ func LoadConfig(filePath string) (*Config, error) {
 		MaxPoolSize:    getConfigInt(zcfg, "database.log.max_pool_size", 100),
 		MinPoolSize:    getConfigInt(zcfg, "database.log.min_pool_size", 10),
 		ConnectTimeout: getConfigInt(zcfg, "database.log.connect_timeout", 30),
+	}
+
+	// 解析pprof配置
+	config.Pprof = PprofConfig{
+		Enabled:       getConfigBool(zcfg, "pprof.enabled", false),
+		ListenAddress: getConfigString(zcfg, "pprof.listen_address", "localhost:6060"),
 	}
 
 	// 设置全局配置实例
@@ -398,12 +439,17 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// 验证pprof配置
+	if c.Pprof.ListenAddress == "" {
+		c.Pprof.ListenAddress = "localhost:6060"
+	}
+
 	return nil
 }
 
 // StartConfigMonitor 启动配置监控
 func StartConfigMonitor(configPath string) error {
-	once.Do(func() {
+	monitorOnce.Do(func() {
 		configMonitor = &ConfigMonitor{
 			configPath: configPath,
 			stopChan:   make(chan struct{}),

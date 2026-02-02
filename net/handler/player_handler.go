@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"crypto/sha256"
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
@@ -15,113 +14,78 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// playerHandler 玩家请求处理器
-type playerHandler struct {
-	playerService *player.PlayerService
-	dbManager     *db.DBManager
-	// 会话管理，用于保存账号和角色的会话信息
-	accountSession map[string]int64 // key: account, value: sessionId
-	sessionAccount map[int64]string // key: sessionId, value: account
-	charSession    map[int64]int64  // key: characterId, value: sessionId
-	sessionChar    map[int64]int64  // key: sessionId, value: characterId
+type PlayerHandler struct {
+	playerService  *player.PlayerService
+	accountSession map[string]zNet.SessionIdType
+	sessionAccount map[zNet.SessionIdType]string
+	charSession    map[int64]zNet.SessionIdType
+	sessionChar    map[zNet.SessionIdType]int64
 }
 
-// NewPlayerHandler 创建玩家请求处理器
-func NewPlayerHandler(playerService *player.PlayerService) *playerHandler {
-	return &playerHandler{
+func NewPlayerNetHandler(playerService *player.PlayerService) *PlayerHandler {
+	return &PlayerHandler{
 		playerService:  playerService,
-		accountSession: make(map[string]int64),
-		sessionAccount: make(map[int64]string),
-		charSession:    make(map[int64]int64),
-		sessionChar:    make(map[int64]int64),
+		accountSession: make(map[string]zNet.SessionIdType),
+		sessionAccount: make(map[zNet.SessionIdType]string),
+		charSession:    make(map[int64]zNet.SessionIdType),
+		sessionChar:    make(map[zNet.SessionIdType]int64),
 	}
 }
 
-// SetDBManager 设置数据库管理器
-func (h *playerHandler) SetDBManager(dbManager *db.DBManager) {
-	h.dbManager = dbManager
+func RegisterPlayerNetHandlers(router *router.PacketRouter, playerService *player.PlayerService) {
+	// 创建player_handler
+
+	handler := NewPlayerNetHandler(playerService)
+
+	router.RegisterHandler(1001, handler.handleAccountCreate)
+	router.RegisterHandler(1002, handler.handleAccountLogin)
+	router.RegisterHandler(1003, handler.handleCharacterCreate)
+	router.RegisterHandler(1004, handler.handleCharacterLogin)
+	router.RegisterHandler(1005, handler.handleCharacterLogout)
+
+	//todo 将来可优化，明确哪些消息需转发给玩家协程处理
+	for i := 1006; i <= 2000; i++ {
+		router.RegisterHandler(int32(i), handler.handlePlayerMessage)
+	}
 }
 
-// RegisterPlayerHandlers 注册玩家相关的消息处理器
-func RegisterPlayerHandlers(router *router.PacketRouter, playerService *player.PlayerService, dbManager *db.DBManager) {
-	handler := NewPlayerHandler(playerService)
-	handler.SetDBManager(dbManager)
-
-	// 注册账号相关处理器
-	router.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_CREATE), handler.handleAccountCreate)
-	router.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN), handler.handleAccountLogin)
-	router.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_CREATE), handler.handleCharacterCreate)
-	router.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGIN), handler.handleCharacterLogin)
-	router.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGOUT), handler.handleCharacterLogout)
-
-	// 注册玩家信息处理器
-	router.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_GET_INFO), handler.handlePlayerGetInfo)
-}
-
-// handlePlayerGetInfo 处理获取玩家信息请求
-func (h *playerHandler) handlePlayerGetInfo(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
-	zLog.Debug("Received get info request", zap.Int64("sessionId", int64(session.GetSid())))
-
-	// 根据sessionId获取玩家
-	player := h.playerService.GetPlayerBySession(int64(session.GetSid()))
-	if player == nil {
-		zLog.Warn("Player not found for session", zap.Int64("sessionId", int64(session.GetSid())))
+func (h *PlayerHandler) handlePlayerMessage(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+	playerId, ok := h.sessionChar[session.GetSid()]
+	if !ok {
+		zLog.Warn("Player not found for session", zap.Uint64("sessionId", session.GetSid()))
 		return nil
 	}
 
-	// 构建玩家信息响应
-	info := protocol.PlayerBasicInfo{
-		PlayerId:   player.GetPlayerId(),
-		Name:       player.GetName(),
-		Level:      int32(player.GetLevel()),
-		Exp:        player.GetExp(),
-		Gold:       player.GetGold(),
-		VipLevel:   0,
-		ServerId:   1,
-		CreateTime: time.Now().UnixMilli(),
+	playerActor := h.playerService.GetPlayerActor(playerId)
+	if playerActor == nil {
+		zLog.Warn("Player actor not found", zap.Int64("playerId", playerId))
+		return nil
 	}
 
-	// 发送响应
-	respData, err := proto.Marshal(&info)
-	if err != nil {
-		zLog.Error("Failed to marshal player info response", zap.Error(err), zap.Int64("playerId", player.GetPlayerId()))
-		return err
-	}
-
-	return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_GET_INFO), respData)
+	msg := player.NewPlayerActorNetworkMessage(playerId, packet)
+	playerActor.SendMessage(msg)
+	return nil
 }
 
-// validateLogin 验证登录信息（模拟）
-func (h *playerHandler) validateLogin(account, password string) bool {
-	// 简单的登录验证逻辑（模拟）
-	// 实际应该连接数据库或认证服务进行验证
-	// 这里允许任何非空的账号密码组合
-	return account != "" && password != ""
-}
+func (h *PlayerHandler) handleAccountCreate(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+	zLog.Debug("Received account create request", zap.Uint64("sessionId", session.GetSid()))
 
-// handleAccountCreate 处理账号创建请求
-func (h *playerHandler) handleAccountCreate(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
-	zLog.Debug("Received account create request", zap.Int64("sessionId", int64(session.GetSid())))
-
-	// 解析请求数据
 	var req protocol.AccountCreateRequest
 	if err := proto.Unmarshal(packet.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal account create request", zap.Error(err))
 		return err
 	}
 
-	// 验证账号和密码
 	if req.Account == "" || req.Password == "" {
 		resp := protocol.AccountCreateResponse{
 			Success:  false,
 			ErrorMsg: "账号或密码不能为空",
 		}
 		respData, _ := proto.Marshal(&resp)
-		return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_CREATE), respData)
+		return session.Send(1001, respData)
 	}
 
-	// 检查账号是否已存在
-	account, err := h.dbManager.AccountRepository.GetByName(req.Account)
+	account, err := db.GetDBManager().AccountRepository.GetByName(req.Account)
 	if err != nil {
 		zLog.Error("Failed to check account existence", zap.Error(err))
 		resp := protocol.AccountCreateResponse{
@@ -129,34 +93,29 @@ func (h *playerHandler) handleAccountCreate(session *zNet.TcpServerSession, pack
 			ErrorMsg: "服务器错误",
 		}
 		respData, _ := proto.Marshal(&resp)
-		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_CREATE), respData)
-		return nil
+		return session.Send(1001, respData)
 	}
 
 	if account != nil {
-		// 账号已存在
 		resp := protocol.AccountCreateResponse{
 			Success:  false,
 			ErrorMsg: "账号已存在",
 		}
 		respData, _ := proto.Marshal(&resp)
-		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_CREATE), respData)
-		return nil
+		return session.Send(1001, respData)
 	}
 
-	// 创建新账号
 	now := time.Now()
 	newAccount := &models.Account{
 		AccountID:   time.Now().UnixNano() / 1000000,
 		AccountName: req.Account,
-		Password:    req.Password, // 实际应该进行加密存储
-		Status:      1,            // 1表示正常
+		Password:    req.Password,
+		Status:      1,
 		CreatedAt:   now,
 		LastLoginAt: now,
 	}
 
-	// 保存账号到数据库
-	_, err = h.dbManager.AccountRepository.Create(newAccount)
+	id, err := db.GetDBManager().AccountRepository.Create(newAccount)
 	if err != nil {
 		zLog.Error("Failed to create account", zap.Error(err))
 		resp := protocol.AccountCreateResponse{
@@ -164,44 +123,45 @@ func (h *playerHandler) handleAccountCreate(session *zNet.TcpServerSession, pack
 			ErrorMsg: "服务器错误",
 		}
 		respData, _ := proto.Marshal(&resp)
-		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_CREATE), respData)
-		return nil
+		return session.Send(1001, respData)
 	}
 
-	// 账号创建成功
+	if id <= 0 {
+		resp := protocol.AccountCreateResponse{
+			Success:  false,
+			ErrorMsg: "服务器错误",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1001, respData)
+	}
+
 	resp := protocol.AccountCreateResponse{
 		Success:  true,
 		ErrorMsg: "",
 	}
 	respData, _ := proto.Marshal(&resp)
-	_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_CREATE), respData)
-
-	return nil
+	return session.Send(1001, respData)
 }
 
-// handleAccountLogin 处理账号登录请求
-func (h *playerHandler) handleAccountLogin(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+func (h *PlayerHandler) handleAccountLogin(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
 	zLog.Debug("Received account login request", zap.Int64("sessionId", int64(session.GetSid())))
 
-	// 解析请求数据
 	var req protocol.AccountLoginRequest
 	if err := proto.Unmarshal(packet.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal account login request", zap.Error(err))
 		return err
 	}
 
-	// 验证账号和密码
 	if req.Account == "" || req.Password == "" {
 		resp := protocol.AccountLoginResponse{
 			Success:  false,
 			ErrorMsg: "账号或密码不能为空",
 		}
 		respData, _ := proto.Marshal(&resp)
-		return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN), respData)
+		return session.Send(1002, respData)
 	}
 
-	// 检查账号是否存在
-	account, err := h.dbManager.AccountRepository.GetByName(req.Account)
+	account, err := db.GetDBManager().AccountRepository.GetByName(req.Account)
 	if err != nil {
 		zLog.Error("Failed to get account", zap.Error(err))
 		resp := protocol.AccountLoginResponse{
@@ -209,79 +169,67 @@ func (h *playerHandler) handleAccountLogin(session *zNet.TcpServerSession, packe
 			ErrorMsg: "服务器错误",
 		}
 		respData, _ := proto.Marshal(&resp)
-		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN), respData)
-		return nil
+		return session.Send(1002, respData)
 	}
 
 	if account == nil || account.Password != req.Password {
-		// 账号不存在或密码错误
 		resp := protocol.AccountLoginResponse{
 			Success:  false,
 			ErrorMsg: "账号或密码错误",
 		}
 		respData, _ := proto.Marshal(&resp)
-		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN), respData)
-		return nil
+		return session.Send(1002, respData)
 	}
 
-	// 更新账号的最后登录时间
 	account.LastLoginAt = time.Now()
-	_, err = h.dbManager.AccountRepository.Update(account)
+	_, err = db.GetDBManager().AccountRepository.Update(account)
 	if err != nil {
 		zLog.Error("Failed to update last login time", zap.Error(err))
 	}
 
-	// 保存账号和会话的对应关系
-	h.accountSession[req.Account] = int64(session.GetSid())
-	h.sessionAccount[int64(session.GetSid())] = req.Account
+	h.accountSession[req.Account] = session.GetSid()
+	h.sessionAccount[session.GetSid()] = req.Account
 
-	// 发送登录成功响应，暂时为空角色列表
+	//todo 查询角色列表
+
 	resp := protocol.AccountLoginResponse{
 		Success:    true,
 		ErrorMsg:   "",
 		Characters: []*protocol.CharacterInfo{},
 	}
 	respData, _ := proto.Marshal(&resp)
-	_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN), respData)
-
-	return nil
+	return session.Send(1002, respData)
 }
 
-// handleCharacterCreate 处理角色创建请求
-func (h *playerHandler) handleCharacterCreate(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+func (h *PlayerHandler) handleCharacterCreate(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
 	zLog.Debug("Received character create request", zap.Int64("sessionId", int64(session.GetSid())))
 
-	// 获取账号信息
-	account, ok := h.sessionAccount[int64(session.GetSid())]
+	account, ok := h.sessionAccount[session.GetSid()]
 	if !ok {
-		// 未找到账号信息，需要重新登录
 		resp := protocol.CharacterCreateResponse{
 			Success:  false,
 			ErrorMsg: "请先登录账号",
 		}
 		respData, _ := proto.Marshal(&resp)
-		return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_CREATE), respData)
+		return session.Send(1003, respData)
 	}
 
-	// 解析请求数据
 	var req protocol.CharacterCreateRequest
 	if err := proto.Unmarshal(packet.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal character create request", zap.Error(err))
 		return err
 	}
 
-	// 验证角色名称
 	if req.Name == "" {
 		resp := protocol.CharacterCreateResponse{
 			Success:  false,
 			ErrorMsg: "角色名称不能为空",
 		}
 		respData, _ := proto.Marshal(&resp)
-		return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_CREATE), respData)
+		return session.Send(1003, respData)
 	}
 
-	// 获取账号ID
-	accountObj, err := h.dbManager.AccountRepository.GetByName(account)
+	accountObj, err := db.GetDBManager().AccountRepository.GetByName(account)
 	if err != nil || accountObj == nil {
 		zLog.Error("Failed to get account", zap.Error(err))
 		resp := protocol.CharacterCreateResponse{
@@ -289,11 +237,9 @@ func (h *playerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 			ErrorMsg: "服务器错误",
 		}
 		respData, _ := proto.Marshal(&resp)
-		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_CREATE), respData)
-		return nil
+		return session.Send(1003, respData)
 	}
 
-	// 创建新角色
 	now := time.Now()
 	newCharacter := &models.Character{
 		CharID:    time.Now().UnixNano() / 1000000,
@@ -306,7 +252,26 @@ func (h *playerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 		UpdatedAt: now,
 	}
 
-	// 发送角色创建成功响应
+	id, err := db.GetDBManager().CharacterRepository.Create(newCharacter)
+	if err != nil {
+		zLog.Error("Failed to create character", zap.Error(err))
+		resp := protocol.CharacterCreateResponse{
+			Success:  false,
+			ErrorMsg: "服务器错误",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1003, respData)
+	}
+
+	if id <= 0 {
+		resp := protocol.CharacterCreateResponse{
+			Success:  false,
+			ErrorMsg: "服务器错误",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1003, respData)
+	}
+
 	resp := protocol.CharacterCreateResponse{
 		Success:  true,
 		ErrorMsg: "",
@@ -319,41 +284,40 @@ func (h *playerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 		},
 	}
 	respData, _ := proto.Marshal(&resp)
-	_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_CREATE), respData)
-
-	return nil
+	return session.Send(1003, respData)
 }
 
-// handleCharacterLogin 处理角色选择登录请求
-func (h *playerHandler) handleCharacterLogin(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+func (h *PlayerHandler) handleCharacterLogin(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
 	zLog.Debug("Received character login request", zap.Int64("sessionId", int64(session.GetSid())))
 
-	// 获取账号信息
-	_, ok := h.sessionAccount[int64(session.GetSid())]
+	_, ok := h.sessionAccount[session.GetSid()]
 	if !ok {
-		// 未找到账号信息，需要重新登录
 		resp := protocol.CharacterLoginResponse{
 			Success:  false,
 			ErrorMsg: "请先登录账号",
 		}
 		respData, _ := proto.Marshal(&resp)
-		return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGIN), respData)
+		return session.Send(1004, respData)
 	}
 
-	// 解析请求数据
 	var req protocol.CharacterLoginRequest
 	if err := proto.Unmarshal(packet.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal character login request", zap.Error(err))
 		return err
 	}
 
-	// 暂时简化实现，直接返回成功响应
-	// 保存角色和会话的对应关系
-	h.charSession[req.CharacterId] = int64(session.GetSid())
-	h.sessionChar[int64(session.GetSid())] = req.CharacterId
+	character, err := db.GetDBManager().CharacterRepository.GetByID(req.CharacterId)
+	if err != nil || character == nil {
+		zLog.Error("Failed to get character", zap.Error(err))
+		resp := protocol.CharacterLoginResponse{
+			Success:  false,
+			ErrorMsg: "角色不存在",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1004, respData)
+	}
 
-	// 创建玩家对象
-	player, err := h.playerService.CreatePlayer(session, req.CharacterId, "PlayerName")
+	_, err = h.playerService.CreatePlayerActor(session, character.CharID, character.CharName)
 	if err != nil {
 		zLog.Error("Failed to create player", zap.Error(err))
 		resp := protocol.CharacterLoginResponse{
@@ -361,80 +325,53 @@ func (h *playerHandler) handleCharacterLogin(session *zNet.TcpServerSession, pac
 			ErrorMsg: "服务器错误",
 		}
 		respData, _ := proto.Marshal(&resp)
-		_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGIN), respData)
-		return nil
+		return session.Send(1004, respData)
 	}
 
-	// 发送角色登录成功响应
+	h.charSession[req.CharacterId] = session.GetSid()
+	h.sessionChar[session.GetSid()] = req.CharacterId
+
 	resp := protocol.CharacterLoginResponse{
 		Success:  true,
 		ErrorMsg: "",
-		PlayerId: player.GetPlayerId(),
-		Name:     player.GetName(),
-		Level:    int32(player.GetLevel()),
-		Gold:     player.GetGold(),
+		PlayerId: character.CharID,
+		Name:     character.CharName,
+		Level:    int32(character.Level),
+		Gold:     1000,
 	}
 	respData, _ := proto.Marshal(&resp)
-	_ = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGIN), respData)
-
-	return nil
+	return session.Send(1004, respData)
 }
 
-// handleCharacterLogout 处理角色登出请求
-func (h *playerHandler) handleCharacterLogout(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+func (h *PlayerHandler) handleCharacterLogout(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
 	zLog.Debug("Received character logout request", zap.Int64("sessionId", int64(session.GetSid())))
 
-	// 获取角色ID
-	characterId, ok := h.sessionChar[int64(session.GetSid())]
+	characterId, ok := h.sessionChar[session.GetSid()]
 	if !ok {
-		// 未找到角色信息
 		resp := protocol.CharacterLogoutResponse{
 			Success:  false,
 			ErrorMsg: "角色未登录",
 		}
 		respData, _ := proto.Marshal(&resp)
-		return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGOUT), respData)
+		return session.Send(1005, respData)
 	}
 
-	// 获取玩家对象
-	player := h.playerService.GetPlayer(characterId)
-	if player != nil {
-		// 处理玩家退出逻辑
-		player.OnDisconnect()
-		h.playerService.RemovePlayer(player.GetPlayerId())
-		zLog.Info("Player logged out", zap.Int64("playerId", player.GetPlayerId()), zap.String("name", player.GetName()))
+	playerActor := h.playerService.GetPlayerActor(characterId)
+	if playerActor != nil {
+		disconnectMsg := player.NewPlayerActorMessage(characterId, "disconnect", nil)
+		playerActor.SendMessage(disconnectMsg)
 
-		// 移除日志记录，暂时简化实现
+		h.playerService.RemovePlayer(characterId)
+		zLog.Info("Player logged out", zap.Int64("playerId", characterId), zap.String("name", playerActor.Player.GetName()))
 	}
 
-	// 清理角色和会话的对应关系
 	delete(h.charSession, characterId)
-	delete(h.sessionChar, int64(session.GetSid()))
+	delete(h.sessionChar, session.GetSid())
 
-	// 发送登出成功响应
 	resp := protocol.CharacterLogoutResponse{
 		Success:  true,
 		ErrorMsg: "",
 	}
 	respData, _ := proto.Marshal(&resp)
-	return session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGOUT), respData)
-}
-
-// hashString 计算字符串的哈希值（用于生成唯一playerId）
-func hashString(s string) int {
-	// 使用SHA256哈希算法
-	hash := sha256.Sum256([]byte(s))
-
-	// 取前4个字节转换为整数
-	result := 0
-	for i := 0; i < 4; i++ {
-		result = result<<8 + int(hash[i])
-	}
-
-	// 确保结果为正整数
-	if result < 0 {
-		result = -result
-	}
-
-	return result
+	return session.Send(1005, respData)
 }

@@ -1,13 +1,54 @@
-
 # zGameServer
 
-一个基于Go语言开发的MMO游戏服务器框架，采用模块化设计，具有良好的可扩展性和高性能。
+## 🏗️ 游戏服务器架构设计文档
 
-## 项目架构详解
+zGameServer是一个基于Go语言开发的MMO游戏服务器框架，采用模块化设计，具有良好的可扩展性和高性能。
 
-### 1. 项目整体架构
+---
 
-zGameServer采用三层架构设计，职责清晰：
+## 📋 目录
+
+- [项目概述](#-项目概述)
+- [整体架构设计](#-整体架构设计)
+- [核心架构设计模式](#-核心架构设计模式)
+- [模块架构详解](#-模块架构详解)
+- [实现方式详解](#-实现方式详解)
+- [新手使用指引](#-新手使用指引)
+- [最佳实践](#-最佳实践)
+
+---
+
+## 🎯 项目概述
+
+### 项目定位
+
+zGameServer是一个**高性能、可扩展、模块化**的MMO游戏服务器框架，专为大型多人在线游戏设计。
+
+### 技术栈
+
+- **语言**：Go 1.25+
+- **网络**：TCP、UDP、WebSocket、HTTP
+- **协议**：Protocol Buffers、JSON、XML
+- **数据库**：MySQL、MongoDB
+- **日志**：zap日志框架
+- **配置**：ini配置文件、Excel表格
+- **依赖注入**：zInject包
+- **服务管理**：zService包
+- **监控**：Prometheus指标
+
+### 项目特点
+
+1. **三层架构设计** - 业务层、引擎层、工具层，职责清晰
+2. **高性能** - 基于Go的并发特性，支持高并发在线
+3. **可扩展** - 模块化设计，易于扩展新功能
+4. **易维护** - 代码结构清晰，便于维护和调试
+5. **完整功能** - 包含玩家系统、战斗系统、公会系统、拍卖行系统等
+
+---
+
+## 🗺️ 整体架构设计
+
+### 三层架构设计
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -18,8 +59,8 @@ zGameServer采用三层架构设计，职责清晰：
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ │
 │  ┌───────────────────────────────────────────────────────────────┐ │
 │  │                    Game Logic Systems                         │ │
-│  │  AI System | Combat System | Skill System | Buff System       │ │
-│  │  Movement | Property System | Object Manager                  │ │
+│  │  AISystem | CombatSystem | SkillSystem | BuffSystem           │ │
+│  │  MovementSystem | PropertySystem | ObjectManager             │ │
 │  └───────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
 
@@ -47,60 +88,106 @@ zGameServer采用三层架构设计，职责清晰：
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. 核心架构设计模式
+### 架构设计理念
 
-#### 2.1 服务架构 (Service Architecture)
+#### 1. 模块化设计理念
+
+**核心理念：单一职责、低耦合、高内聚**
 
 ```go
-type GameServer struct {
-    *zService.ServiceManager   // 服务管理器（继承）
-    wg            sync.WaitGroup
-    packetRouter  *router.PacketRouter
-    protocol      protolayer.Protocol
-    objectManager *zObject.ObjectManager
+// 每个模块负责一个特定的功能
+type Player struct {
+    *object.LivingObject
+    playerId int64
+    session  *zNet.TcpServerSession
+}
+
+type CombatSystem struct {
+    attacks map[int64]*AttackRecord
+    mu      sync.RWMutex
+}
+
+type GuildSystem struct {
+    guilds map[int64]*Guild
+    mu     sync.RWMutex
 }
 ```
 
-**特点：**
-- **服务拓扑排序**：自动计算服务依赖关系，确保有序启动/关闭
-- **服务状态管理**：Created → Init → Running → Stopping → Stopped
-- **依赖注入 (DI)**：基于名称的依赖注入容器
-- **并行启动**：每个服务在独立goroutine中运行
+#### 2. 事件驱动设计理念
 
-#### 2.2 Actor模型 (Actor Model)
+**核心理念：通过事件实现模块间解耦通信**
 
 ```go
+// 事件定义
+const (
+    EventTypeUserLogin EventType = iota
+    EventTypeUserLogout
+    EventTypeCharacterCreated
+    EventTypeCharacterSelected
+    EventTypeCharacterEnteredMap
+    EventTypeCharacterLeftMap
+    EventTypePlayerAttack
+    EventTypePlayerMove
+    EventTypePlayerSkill
+)
+
+// 事件使用
+func (ps *PlayerService) HandleCharacterEnteredMap(player *Player) {
+    // 发布角色进入地图事件
+    event := NewEvent(EventTypeCharacterEnteredMap, &CharacterEnteredMapEvent{
+        PlayerID: player.GetPlayerId(),
+        MapID:    player.GetMapId(),
+    })
+    eventBus.Publish(event)
+}
+```
+
+#### 3. Actor并发设计理念
+
+**核心理念：基于消息传递的并发模型**
+
+```go
+// PlayerActor实现
 type PlayerActor struct {
     *zActor.BaseActor
     Player *Player
 }
-```
 
-**核心特点：**
-- **消息驱动**：所有通信通过消息队列异步处理
-- **并发隔离**：每个Actor拥有独立状态，避免竞态条件
-- **全局系统**：统一管理所有Actor实例
-- **类型安全**：强类型消息定义
+// 创建PlayerActor
+func NewPlayerActor(player *Player) *PlayerActor {
+    pa := &PlayerActor{
+        BaseActor: *zActor.NewBaseActor("player", player.GetPlayerId()),
+        Player:    player,
+    }
 
-#### 2.3 事件驱动架构 (Event-Driven Architecture)
+    // 启动消息处理循环
+    go pa.Run()
 
-```go
-type EventBus struct {
-    handlers map[EventType][]EventHandler
-    mu       sync.RWMutex
-    running  atomic.Bool
+    return pa
+}
+
+// 消息处理循环
+func (pa *PlayerActor) Run() {
+    for {
+        select {
+        case msg := <-pa.Mailbox:
+            // 处理网络消息
+            pa.handleMessage(msg)
+
+        case <-time.After(time.Second / 10): // 100ms tick
+            // 玩家主循环
+            pa.update()
+        }
+    }
 }
 ```
 
-**核心功能：**
-- **异步事件发布**：非阻塞式事件分发
-- **事件订阅**：支持多订阅者监听同一事件
-- **事件同步**：支持同步阻塞处理
-- **事件监控**：事件处理统计和异常捕获
+#### 4. ECS架构设计理念
 
-#### 2.4 ECS架构 (Entity-Component-System)
+**核心理念：实体-组件-系统分离**
 
 ```go
+// Entity - 实体（唯一标识符）
 type GameObject struct {
     *zObject.BaseObject
     name         string
@@ -109,9 +196,235 @@ type GameObject struct {
     eventEmitter *zEvent.EventBus
     components   *component.ComponentManager
 }
+
+// Component - 组件（纯数据容器）
+type BaseInfo struct {
+    *component.BaseComponent
+    name       string
+    session    *zNet.TcpServerSession
+    status     atomic.Int32
+    exp        atomic.Int64
+    gold       atomic.Int64
+    level      atomic.Int32
+    vipLevel   atomic.Int32
+    serverId   int
+    createTime int64
+}
+
+// System - 系统（行为逻辑处理）
+type CombatSystem struct {
+    attacks map[int64]*AttackRecord
+    mu      sync.RWMutex
+}
+
+func (cs *CombatSystem) HandleAttack(attacker, target *Player) {
+    // 计算伤害
+    damage := cs.calculateDamage(attacker, target)
+
+    // 处理伤害
+    target.GetBaseInfo().SubHP(damage)
+
+    // 发布战斗事件
+    event := NewEvent(EventTypePlayerAttack, &PlayerAttackEvent{
+        AttackerID: attacker.GetPlayerId(),
+        TargetID:   target.GetPlayerId(),
+        Damage:     damage,
+    })
+    eventBus.Publish(event)
+}
 ```
 
-**ECS组成：**
+---
+
+## 🎨 核心架构设计模式
+
+### 1. 服务架构模式 (Service Architecture)
+
+```go
+// 服务器核心
+type GameServer struct {
+    *zService.ServiceManager   // 服务管理器（继承）
+    wg            sync.WaitGroup
+    packetRouter  *router.PacketRouter
+    protocol      protolayer.Protocol
+    objectManager *zObject.ObjectManager
+}
+
+// 服务基类
+type BaseService struct {
+    zObject.BaseObject
+    state ServiceState
+    mu    sync.RWMutex
+}
+
+// 服务状态
+type ServiceState int
+
+const (
+    ServiceStateCreated ServiceState = iota
+    ServiceStateInit
+    ServiceStateRunning
+    ServiceStateStopping
+    ServiceStateStopped
+)
+```
+
+**核心特点**：
+
+- **服务拓扑排序**：自动计算服务依赖关系，确保有序启动/关闭
+- **服务状态管理**：Created → Init → Running → Stopping → Stopped
+- **依赖注入 (DI)**：基于名称的依赖注入容器
+- **并行启动**：每个服务在独立goroutine中运行
+
+### 2. 事件驱动架构模式 (Event-Driven Architecture)
+
+```go
+// 事件总线
+type EventBus struct {
+    handlers map[EventType][]EventHandler
+    mu       sync.RWMutex
+    running  atomic.Bool
+}
+
+// 事件处理
+func (eb *EventBus) Publish(event Event) {
+    eb.mu.RLock()
+    defer eb.mu.RUnlock()
+
+    handlers, exists := eb.handlers[event.Type()]
+    if !exists {
+        return
+    }
+
+    // 异步处理事件
+    for _, handler := range handlers {
+        go handler(event)
+    }
+}
+```
+
+**核心功能**：
+
+- **异步事件发布**：非阻塞式事件分发
+- **事件订阅**：支持多订阅者监听同一事件
+- **事件同步**：支持同步阻塞处理
+- **事件监控**：事件处理统计和异常捕获
+
+### 3. Actor模型模式 (Actor Model)
+
+```go
+// PlayerActor实现
+type PlayerActor struct {
+    *zActor.BaseActor
+    Player *Player
+}
+
+// 创建PlayerActor
+func NewPlayerActor(player *Player) *PlayerActor {
+    pa := &PlayerActor{
+        BaseActor: *zActor.NewBaseActor("player", player.GetPlayerId()),
+        Player:    player,
+    }
+
+    // 启动消息处理循环
+    go pa.Run()
+
+    return pa
+}
+
+// 消息处理循环
+func (pa *PlayerActor) Run() {
+    for {
+        select {
+        case msg := <-pa.Mailbox:
+            // 处理网络消息
+            pa.handleMessage(msg)
+
+        case <-time.After(time.Second / 10): // 100ms tick
+            // 玩家主循环
+            pa.update()
+        }
+    }
+}
+
+// 处理网络消息
+func (pa *PlayerActor) handleMessage(msg *zActor.Message) {
+    switch msg.Type {
+    case protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN:
+        pa.handleLogin(msg)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_ATTACK:
+        pa.handleAttack(msg)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_MOVE:
+        pa.handleMove(msg)
+
+    default:
+        // 处理其他消息
+    }
+}
+```
+
+**核心特点**：
+
+- **消息驱动**：所有通信通过消息队列异步处理
+- **并发隔离**：每个Actor拥有独立状态，避免竞态条件
+- **全局系统**：统一管理所有Actor实例
+- **类型安全**：强类型消息定义
+
+### 4. ECS架构模式 (Entity-Component-System)
+
+```go
+// Entity - 实体（唯一标识符）
+type GameObject struct {
+    *zObject.BaseObject
+    name         string
+    objectType   GameObjectType
+    position     Vector3
+    eventEmitter *zEvent.EventBus
+    components   *component.ComponentManager
+}
+
+// 组件访问
+func (g *GameObject) GetComponent(name string) interface{} {
+    return g.components.GetComponent(name)
+}
+
+func (g *GameObject) AddComponent(component common.IComponent) {
+    g.components.AddComponent(component)
+}
+
+// System - 系统（行为逻辑处理）
+type CombatSystem struct {
+    attacks map[int64]*AttackRecord
+    mu      sync.RWMutex
+}
+
+func (cs *CombatSystem) HandleAttack(attacker, target *Player) {
+    // 获取攻击者基础信息
+    attackerBaseInfo := attacker.GetComponent("baseinfo").(player.IBaseInfo)
+
+    // 获取目标基础信息
+    targetBaseInfo := target.GetComponent("baseinfo").(player.IBaseInfo)
+
+    // 计算伤害
+    damage := cs.calculateDamage(attacker, target)
+
+    // 处理伤害
+    targetBaseInfo.SubHP(damage)
+
+    // 发布战斗事件
+    event := NewEvent(EventTypePlayerAttack, &PlayerAttackEvent{
+        AttackerID: attacker.GetPlayerId(),
+        TargetID:   target.GetPlayerId(),
+        Damage:     damage,
+    })
+    eventBus.Publish(event)
+}
+```
+
+**ECS组成**：
+
 - **Entity (实体)**：唯一标识符，无行为
 - **Component (组件)**：纯数据容器
   - PropertyComponent：属性管理
@@ -125,873 +438,1680 @@ type GameObject struct {
   - BuffSystem：Buff管理
   - PropertySystem：属性计算
 
-#### 2.5 对象池设计 (Object Pool)
+### 5. 对象池设计模式 (Object Pool)
 
 ```go
+// 对象池实现
 type GenericPool struct {
     mu      sync.Mutex
     objects []interface{}
     newFunc func() interface{}
     maxSize int
 }
+
+// 创建对象池
+func NewGenericPool(newFunc func() interface{}, maxSize int) *GenericPool {
+    return &GenericPool{
+        newFunc: newFunc,
+        maxSize: maxSize,
+        objects: make([]interface{}, 0, maxSize),
+    }
+}
+
+// 获取对象
+func (p *GenericPool) Get() interface{} {
+    p.mu.Lock()
+    defer p.mu.Unlock()
+
+    if len(p.objects) > 0 {
+        obj := p.objects[len(p.objects)-1]
+        p.objects = p.objects[:len(p.objects)-1]
+        return obj
+    }
+
+    return p.newFunc()
+}
+
+// 归还对象
+func (p *GenericPool) Put(obj interface{}) {
+    p.mu.Lock()
+    defer p.mu.Unlock()
+
+    if len(p.objects) < p.maxSize {
+        p.objects = append(p.objects, obj)
+    }
+    // 否则丢弃对象
+}
 ```
 
-**应用场景：**
+**应用场景**：
+
 - **技能对象池**：技能频繁创建/销毁
 - **Buff对象池**：Buff效果管理
 - **Actor对象池**：PlayerActor复用
 
-#### 2.6 网络层架构 (Network Architecture)
+---
+
+## 🏗️ 模块架构详解
+
+### 1. 玩家系统模块
+
+#### 架构设计
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                       Player                            │
+├─────────────────────────────────────────────────────────┤
+│  playerId  session  object.LivingObject                 │
+├─────────────────────────────────────────────────────────┤
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ BaseInfo │ │ Inventory │ │ Equipment │ │ Mailbox │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐              │
+│  │ TaskMgr  │ │ SkillMgr │ │ Position │              │
+│  └──────────┘ └──────────┘ └──────────┘              │
+├─────────────────────────────────────────────────────────┤
+│  AddComponent()  GetComponent()  Update()              │
+└─────────────────────────────────────────────────────────┘
+         │
+         └──> ┌─────────────────────────────────────────┐
+              │               PlayerActor               │
+              ├─────────────────────────────────────────┤
+              │  Mailbox  Run()  handleMessage()         │
+              │  update()  sendToClient()               │
+              └─────────────────────────────────────────┘
+```
+
+#### 设计理念
+
+**核心理念：组件化、消息驱动、主循环**
+
+1. **组件化设计**
+
+   - 使用组件系统组织玩家数据
+   - 支持动态添加/移除组件
+   - 高内聚、低耦合的设计
+2. **消息驱动**
+
+   - 网络消息通过消息队列异步处理
+   - 主循环处理玩家逻辑
+   - 事件机制处理模块间通信
+3. **主循环设计**
+
+   - 固定时间间隔更新（100ms）
+   - 处理网络消息
+   - 处理玩家逻辑更新
+
+#### 实现方式
 
 ```go
-type Protocol interface {
-    Encode(protoId int32, version int32, data interface{}) (*zNet.NetPacket, error)
-    Decode(packet *zNet.NetPacket) (interface{}, error)
+// Player结构体
+type Player struct {
+    *object.LivingObject
+    playerId int64
+    session  *zNet.TcpServerSession
+}
+
+// 获取组件
+func (p *Player) GetComponent(name string) interface{} {
+    return p.LivingObject.GetComponent(name)
+}
+
+// 获取等级
+func (p *Player) GetLevel() int {
+    baseInfo := p.GetComponent("baseinfo")
+    if baseInfo == nil {
+        return 1
+    }
+    return baseInfo.(player.IBaseInfo).GetLevel()
+}
+
+// 获取经验
+func (p *Player) GetExp() int64 {
+    baseInfo := p.GetComponent("baseinfo")
+    if baseInfo == nil {
+        return 0
+    }
+    return baseInfo.(player.IBaseInfo).GetExp()
+}
+
+// PlayerActor实现
+type PlayerActor struct {
+    *zActor.BaseActor
+    Player *Player
+}
+
+// 消息处理循环
+func (pa *PlayerActor) Run() {
+    for {
+        select {
+        case msg := <-pa.Mailbox:
+            // 处理网络消息
+            pa.handleMessage(msg)
+
+        case <-time.After(time.Second / 10): // 100ms tick
+            // 玩家主循环
+            pa.update()
+        }
+    }
+}
+
+// 处理网络消息
+func (pa *PlayerActor) handleMessage(msg *zActor.Message) {
+    switch msg.Type {
+    case protocol.PlayerMsgId_MSG_PLAYER_ATTACK:
+        pa.handleAttack(msg)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_MOVE:
+        pa.handleMove(msg)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_SKILL:
+        pa.handleSkill(msg)
+
+    default:
+        // 处理其他消息
+    }
+}
+
+// 玩家主循环
+func (pa *PlayerActor) update() {
+    // 更新玩家组件
+    pa.Player.Update(0.1) // 100ms
+
+    // 处理玩家状态
+    pa.handlePlayerState()
+
+    // 同步玩家数据到客户端
+    pa.syncPlayerData()
 }
 ```
 
-**支持多种协议：**
-- ProtocolTypeProtobuf
-- ProtocolTypeJSON  
-- ProtocolTypeXML
+### 2. 战斗系统模块
 
-**网络层特点：**
-- **DDoS防护**：IP限流、连接控制
-- **数据包路由**：基于ProtoId的消息分发
-- **网络指标**：延迟监控、吞吐量统计
-- **安全传输**：RSA加密 + AESEncryption
-
-## 项目特点
-
-### 1. 模块化设计
-- 清晰的代码结构，便于维护和扩展
-- 各模块低耦合，高内聚
-- 易于进行单元测试和集成测试
-
-### 2. 多数据库支持
-- 支持MySQL和MongoDB数据库
-- 异步数据库操作，提高服务器性能
-- 数据模型与业务逻辑分离
-
-### 3. 配置化管理
-- 通过配置文件和Excel表格管理服务器参数和游戏数据
-- 支持热更新配置，无需重启服务器
-- 方便游戏策划和运营人员进行数值调整
-
-### 4. 完善的日志系统
-- 使用zap日志框架，支持不同级别日志输出
-- 结构化日志，便于数据分析和监控
-- 日志轮转和压缩，节省存储空间
-
-### 5. 协议缓冲区
-- 使用Protocol Buffers进行高效的网络通信
-- 支持多种协议格式，满足不同场景需求
-- 可插拔协议设计，易于扩展新协议
-
-### 6. 安全机制
-- 账号密码验证和角色数据保护
-- DDoS防护机制，限制IP连接数和流量
-- 协议验证和数据完整性检查
-
-### 7. 崩溃恢复
-- 服务器崩溃时自动捕获堆栈信息并记录到日志
-- 完善的错误处理和恢复机制
-- 提高系统稳定性和可维护性
-
-### 8. 组件系统
-- 基于组件的游戏对象管理
-- 高度的灵活性和可扩展性
-- 动态添加和移除组件，实现功能扩展
-
-### 9. 依赖注入容器
-- 实现了zDI包，支持单例和工厂两种依赖类型
-- 提高代码的可维护性和可测试性
-- 自动依赖解析，简化开发流程
-
-### 10. 服务自动注册和发现
-- 扩展了zService包，实现了服务的自动注册和发现机制
-- 支持服务的依赖管理，确保服务按正确顺序启动
-- 服务状态监控，便于系统维护
-
-### 11. 监控系统
-- Prometheus指标，通过 `/metrics` 端点暴露服务器运行指标
-- 网络指标：连接数、延迟、吞吐量等
-- 业务指标：玩家在线数、公会数量、拍卖行交易等
-- 服务器状态：CPU、内存、GC等
-
-## 技术栈
-
-- **语言**：Go 1.25.5
-- **网络**：TCP和HTTP协议，Protocol Buffers
-- **数据库**：MySQL、MongoDB
-- **日志**：zap日志框架
-- **配置**：ini配置文件，Excel表格
-- **依赖管理**：Go Modules
-- **依赖注入**：zDI包，支持单例和工厂两种依赖类型
-- **服务管理**：zService包，支持服务的自动注册和发现，依赖管理
-
-## 项目结构
+#### 架构设计
 
 ```
-zGameServer/
-├── client/                 # 客户端测试代码
-├── config/                 # 配置管理
-│   ├── models/             # 配置模型
-│   ├── tables/             # Excel配置表管理
-│   └── ini_config.go       # ini配置文件管理
-├── db/                     # 数据库相关代码
-│   ├── connector/          # 数据库连接器
-│   ├── dao/                # 数据访问对象
-│   ├── models/             # 数据模型
-│   └── db.go               # 数据库管理器
-├── event/                  # 事件系统
-├── game/                   # 游戏核心逻辑
-│   ├── auction/            # 拍卖行系统
-│   ├── common/             # 公共接口和工具
-│   ├── guild/              # 公会系统
-│   ├── maps/               # 地图系统
-│   ├── monsters/           # 怪物系统
-│   ├── npc/                # NPC系统
-│   ├── object/             # 游戏对象系统
-│   │   └── component/      # 组件系统
-│   ├── pets/               # 宠物系统
-│   ├── player/             # 玩家系统
-│   └── systems/            # 核心游戏系统
-│       ├── ai/             # AI系统
-│       ├── buff/           # Buff系统
-│       ├── combat/         # 战斗系统
-│       ├── movement/       # 移动系统
-│       ├── property/       # 属性系统
-│       └── skill/          # 技能系统
-├── gameserver/             # 服务器核心
-├── metrics/                # 监控系统
-├── net/                    # 网络相关代码
-│   ├── handler/            # 请求处理器
-│   ├── metrics/            # 网络指标
-│   ├── protocol/           # 协议定义
-│   ├── protolayer/         # 协议层实现
-│   ├── router/             # 路由管理
-│   └── service/            # 网络服务
-├── resources/              # 资源文件
-│   ├── excel_tables/       # Excel配置表
-│   └── maps/               # 地图资源
-├── util/                   # 工具类
-├── config.ini              # 配置文件
-├── go.mod                  # Go模块依赖
-├── go.sum                  # 依赖校验
-└── main.go                 # 主入口文件
+┌─────────────────────────────────────────────────────────┐
+│                     CombatSystem                       │
+├─────────────────────────────────────────────────────────┤
+│  attacks: map[int64]*AttackRecord                      │
+│  mu: sync.RWMutex                                       │
+├─────────────────────────────────────────────────────────┤
+│  HandleAttack()  calculateDamage()  handleDamage()       │
+│  handleHit()     handleCritical()  handleMiss()         │
+│  handleBlock()   handleParry()     handleDodge()        │
+└─────────────────────────────────────────────────────────┘
+         │
+         └──> ┌─────────────────────────────────────────┐
+              │              AttackRecord               │
+              ├─────────────────────────────────────────┤
+              │  attackerID  targetID  damage            │
+              │  hitType  critical  timestamp           │
+              └─────────────────────────────────────────┘
+         │
+         └──> ┌─────────────────────────────────────────┐
+              │                BuffSystem               │
+              ├─────────────────────────────────────────┤
+              │  buffs: map[int64][]*Buff                │
+              │  ApplyBuff()  RemoveBuff()  UpdateBuffs()│
+              └─────────────────────────────────────────┘
 ```
 
-## 核心功能模块
+#### 设计理念
 
-### 1. 网络服务
+**核心理念：事件驱动、状态机、结果回调**
 
-- **TCP服务**：处理客户端实时连接
-- **HTTP服务**：处理非实时请求（如充值下发等）
-- **数据包路由和处理**：基于ProtoId的消息分发
-- **会话管理**：玩家会话的创建、维护和销毁
-- **支持多种协议格式**：Protobuf、JSON、XML
-- **工作线程池**：并行处理数据包，提高服务器性能
-- **DDoS保护**：限制每个IP的连接数、数据包数和流量
+1. **事件驱动**
 
-### 2. 游戏对象系统
+   - 战斗事件通过事件总线分发
+   - 支持战斗前、战斗中、战斗后的事件处理
+   - 模块化的战斗逻辑
+2. **状态机设计**
 
-- **GameObject**：基础游戏对象，包含ID、名称、位置等基本属性
-- **LivingObject**：生命对象，继承自GameObject，增加生命值等属性
-- **Component**：组件系统，允许动态为游戏对象添加功能
-- **ComponentManager**：组件管理器，负责组件的添加、移除和管理
+   - 攻击状态、防御状态、暴击状态、闪避状态
+   - 状态转换清晰
+   - 便于扩展新状态
+3. **结果回调**
 
-### 3. 玩家系统
+   - 战斗结果通过回调通知
+   - 支持异步战斗结果处理
+   - 便于扩展战斗结果处理
 
-- **账号创建和登录**：账号验证、角色选择
-- **PlayerInventory**：玩家背包系统，管理物品
-- **PlayerEquipment**：玩家装备系统，管理装备
-- **PlayerSkill**：玩家技能系统，管理技能
-- **PlayerTask**：玩家任务系统，管理任务
-- **PlayerMailbox**：玩家邮箱系统，管理邮件
+#### 实现方式
 
-### 4. 怪物和NPC系统
+```go
+// CombatSystem结构体
+type CombatSystem struct {
+    attacks map[int64]*AttackRecord
+    mu      sync.RWMutex
+}
 
-- **Monster**：怪物对象，包含AI行为、掉落配置
-- **NPC**：非玩家角色，包含对话、交互逻辑
-- **AIBehavior**：AI行为系统，处理怪物和NPC的智能行为
+// 处理攻击事件
+func (cs *CombatSystem) HandleAttack(attacker, target *Player) {
+    // 获取攻击者基础信息
+    attackerBaseInfo := attacker.GetComponent("baseinfo").(player.IBaseInfo)
 
-### 5. 宠物系统
+    // 获取目标基础信息
+    targetBaseInfo := target.GetComponent("baseinfo").(player.IBaseInfo)
 
-- **Pet**：宠物对象，包含成长、亲密度系统
-- **PetGrowthSystem**：宠物成长系统，管理宠物等级、经验
-- **IntimacySystem**：宠物亲密度系统，管理宠物与玩家的关系
+    // 计算伤害
+    damage := cs.calculateDamage(attacker, target)
 
-### 6. 核心游戏系统
+    // 处理伤害
+    targetBaseInfo.SubHP(damage)
 
-- **CombatSystem**：战斗核心系统，处理战斗计算、仇恨管理
-- **MovementSystem**：移动系统，处理游戏对象的移动
-- **PropertySystem**：属性系统，管理游戏对象的属性
-- **SkillSystem**：技能系统，处理技能释放、冷却管理
+    // 记录攻击记录
+    attackRecord := &AttackRecord{
+        attackerID: attacker.GetPlayerId(),
+        targetID:   target.GetPlayerId(),
+        damage:    damage,
+        timestamp:  time.Now().UnixMilli(),
+    }
+    cs.attacks[attackRecord.attackerID] = attackRecord
 
-### 7. 全局系统
+    // 发布战斗事件
+    event := NewEvent(EventTypePlayerAttack, &PlayerAttackEvent{
+        AttackerID: attacker.GetPlayerId(),
+        TargetID:   target.GetPlayerId(),
+        Damage:     damage,
+    })
+    eventBus.Publish(event)
 
-- **GuildSystem**：公会系统，处理公会创建、管理
-- **AuctionSystem**：拍卖行系统，处理物品拍卖
-- **MapSystem**：地图系统，处理地图加载、管理
+    // 发送攻击结果到客户端
+    attackerActor := player.GetPlayerActor(attacker.GetPlayerId())
+    attackerActor.sendToClient(&protocol.PlayerAttackResponse{
+        Success: true,
+        TargetID: target.GetPlayerId(),
+        Damage:   damage,
+    })
+}
 
-### 8. 数据库模块
+// 计算伤害
+func (cs *CombatSystem) calculateDamage(attacker, target *Player) int32 {
+    // 获取攻击者攻击力
+    attack := attacker.GetComponent("property").(player.IProperty).GetAttack()
 
-- **多数据库连接管理**：支持MySQL和MongoDB
-- **异步数据库操作**：所有数据库操作均为异步，提高服务器性能
-- **数据模型定义**：清晰的数据模型设计
-- **数据访问对象（DAO）**：封装数据库访问逻辑
-- **Repository层**：业务数据仓库，处理业务数据操作
+    // 获取目标防御力
+    defense := target.GetComponent("property").(player.IProperty).GetDefense()
 
-### 9. 配置系统
+    // 计算基础伤害
+    damage := attack - defense
+    if damage < 1 {
+        damage = 1
+    }
 
-- **ini配置**：服务器基本配置，如端口、数据库连接等
-- **Excel配置表**：游戏数据配置，如物品、技能、怪物等
-- **DDoS保护配置**：限制每个IP的连接数、数据包数、流量
-- **支持热更新配置**：无需重启服务器
+    // 计算暴击
+    if cs.isCritical(attacker) {
+        damage *= 2
+    }
 
-### 10. 日志系统
+    return damage
+}
 
-- **服务器运行日志**：记录服务器启动、关闭等关键事件
-- **登录登出日志**：记录玩家的登录和登出行为
-- **错误和崩溃日志**：记录服务器错误和崩溃信息
-- **结构化日志**：便于数据分析和监控
+// 暴击判定
+func (cs *CombatSystem) isCritical(attacker *Player) bool {
+    // 获取暴击率
+    critRate := attacker.GetComponent("property").(player.IProperty).GetCritRate()
 
-### 11. 监控系统
+    // 随机判定
+    if rand.Float32() < critRate {
+        return true
+    }
 
-- **Prometheus指标**：通过 `/metrics` 端点暴露服务器运行指标
-- **网络指标**：连接数、延迟、吞吐量等
-- **业务指标**：玩家在线数、公会数量、拍卖行交易等
-- **服务器状态**：CPU、内存、GC等
+    return false
+}
+```
 
-### 12. 依赖注入容器
+### 3. 公会系统模块
 
-- **zDI包**：实现了功能完整的依赖注入容器
-- **支持单例和工厂**：两种依赖类型，满足不同场景的需求
-- **线程安全**：容器的实现考虑了并发安全性
-- **依赖管理**：提供了依赖注册、解析、检查和管理的完整功能
+#### 架构设计
 
-### 13. 服务管理系统
+```
+┌─────────────────────────────────────────────────────────┐
+│                      GuildSystem                        │
+├─────────────────────────────────────────────────────────┤
+│  guilds: map[int64]*Guild                              │
+│  mu: sync.RWMutex                                       │
+├─────────────────────────────────────────────────────────┤
+│  CreateGuild()  DestroyGuild()  GetGuild()             │
+│  JoinGuild()    LeaveGuild()    KickFromGuild()        │
+│  UpgradeGuild()  DonateGuild()  ApplyGuild()           │
+│  HandleGuildWar()  HandleGuildEvent()                   │
+└─────────────────────────────────────────────────────────┘
+         │
+         └──> ┌─────────────────────────────────────────┐
+              │                  Guild                  │
+              ├─────────────────────────────────────────┤
+              │  guildID  name  level  exp  money       │
+              │  leaderID  members: map[int64]*GuildMember│
+              │  applications: map[int64]*GuildApplication│
+              ├─────────────────────────────────────────┤
+              │  GetLevel()  GetExp()  AddExp()         │
+              │  GetMoney()  AddMoney()  KickMember()    │
+              │  AcceptApplication()  RejectApplication()│
+              └─────────────────────────────────────────┘
+         │
+         └──> ┌─────────────────────────────────────────┐
+              │              GuildMember                 │
+              ├─────────────────────────────────────────┤
+              │  playerID  role  joinTime  contribution  │
+              │  isOnline                                 │
+              └─────────────────────────────────────────┘
+```
 
-- **zService包**：扩展了服务管理功能
-- **服务自动注册和发现**：实现了服务的自动注册和发现机制
-- **服务依赖管理**：支持服务的依赖管理，确保服务按照正确的顺序初始化和启动
-- **服务生命周期管理**：管理服务的创建、初始化、运行和停止等生命周期
+#### 设计理念
 
-## 新手接入步骤
+**核心理念：模块化、事件驱动、权限控制**
 
-### 步骤1：环境准备
+1. **模块化设计**
 
-1. **安装Go环境**
-   - 下载并安装Go 1.25.5或更高版本：https://golang.org/dl/
-   - 配置GOPATH环境变量
-   - 验证安装：`go version`
+   - 公会系统独立于玩家系统
+   - 支持公会创建、升级、解散等操作
+   - 高内聚、低耦合的设计
+2. **事件驱动**
 
-2. **安装数据库**
-   - 安装MySQL 5.7+ 或更高版本
-   - 安装MongoDB 4.0+ 或更高版本（可选）
-   - 创建数据库和用户
+   - 公会事件通过事件总线分发
+   - 支持公会创建、升级、解散等事件处理
+   - 事件机制处理模块间通信
+3. **权限控制**
 
-3. **安装Protobuf编译器**
-   - 下载Protobuf编译器：https://github.com/protocolbuffers/protobuf/releases
-   - 配置环境变量，确保 `protoc` 命令可用
+   - 公会成员权限控制
+   - 公会管理权限控制
+   - 灵活的权限配置
 
-### 步骤2：克隆项目
+#### 实现方式
+
+```go
+// GuildSystem结构体
+type GuildSystem struct {
+    guilds map[int64]*Guild
+    mu     sync.RWMutex
+}
+
+// 创建公会
+func (gs *GuildSystem) CreateGuild(leader *Player, name string) (*Guild, error) {
+    // 检查公会名称
+    if gs.isGuildNameExist(name) {
+        return nil, errors.New("公会名称已存在")
+    }
+
+    // 创建公会
+    guild := &Guild{
+        guildID:   generateGuildID(),
+        name:      name,
+        level:     1,
+        exp:       0,
+        money:     0,
+        leaderID:  leader.GetPlayerId(),
+        members:   make(map[int64]*GuildMember),
+        applications: make(map[int64]*GuildApplication),
+    }
+
+    // 添加会长
+    guild.AddMember(leader, GuildRoleLeader)
+
+    // 保存公会
+    gs.mu.Lock()
+    defer gs.mu.Unlock()
+    gs.guilds[guild.guildID] = guild
+
+    // 发布公会创建事件
+    event := NewEvent(EventTypeGuildCreated, &GuildCreatedEvent{
+        GuildID:   guild.guildID,
+        GuildName: guild.name,
+        LeaderID:  leader.GetPlayerId(),
+    })
+    eventBus.Publish(event)
+
+    return guild, nil
+}
+
+// 加入公会
+func (gs *GuildSystem) JoinGuild(guildID int64, player *Player) error {
+    // 获取公会
+    guild, exists := gs.GetGuild(guildID)
+    if !exists {
+        return errors.New("公会不存在")
+    }
+
+    // 检查玩家是否已加入公会
+    if gs.GetPlayerGuildID(player.GetPlayerId()) != 0 {
+        return errors.New("玩家已加入公会")
+    }
+
+    // 添加公会成员
+    guild.AddMember(player, GuildRoleMember)
+
+    // 发布公会加入事件
+    event := NewEvent(EventTypeGuildJoined, &GuildJoinedEvent{
+        GuildID:    guildID,
+        PlayerID:   player.GetPlayerId(),
+    })
+    eventBus.Publish(event)
+
+    return nil
+}
+
+// 离开公会
+func (gs *GuildSystem) LeaveGuild(guildID int64, player *Player) error {
+    // 获取公会
+    guild, exists := gs.GetGuild(guildID)
+    if !exists {
+        return errors.New("公会不存在")
+    }
+
+    // 检查玩家是否在公会中
+    if guild.GetPlayerGuildRole(player.GetPlayerId()) == GuildRoleNone {
+        return errors.New("玩家不在公会中")
+    }
+
+    // 检查是否是会长
+    if guild.leaderID == player.GetPlayerId() {
+        return errors.New("会长不能离开公会，只能解散公会")
+    }
+
+    // 移除公会成员
+    guild.RemoveMember(player.GetPlayerId())
+
+    // 发布公会离开事件
+    event := NewEvent(EventTypeGuildLeft, &GuildLeftEvent{
+        GuildID:    guildID,
+        PlayerID:   player.GetPlayerId(),
+    })
+    eventBus.Publish(event)
+
+    return nil
+}
+```
+
+---
+
+## 🔧 实现方式详解
+
+### 1. 网络模块实现
+
+#### 网络服务实现
+
+```go
+// 网络服务结构体
+type TcpService struct {
+    server     *zNet.TcpServer
+    logger      zLog.Logger
+    handler     NetHandler
+    stopChan    chan struct{}
+    wg          sync.WaitGroup
+}
+
+// 创建网络服务
+func NewTcpService(config *zNet.TcpConfig, logger zLog.Logger, handler NetHandler) *TcpService {
+    return &TcpService{
+        logger:      logger,
+        handler:     handler,
+        stopChan:    make(chan struct{}),
+    }
+}
+
+// 启动网络服务
+func (s *TcpService) Start() error {
+    // 创建TCP服务器
+    server := zNet.NewTcpServer(s.config,
+        zNet.WithLogger(s.logger),
+        zNet.WithWorkerPoolSize(100),
+    )
+
+    // 注册消息处理器
+    server.RegisterDispatcher(func(session interface{}, packet *zNet.NetPacket) error {
+        return s.handler(session, packet)
+    }, 100)
+
+    // 启动服务器
+    if err := server.Start(); err != nil {
+        return err
+    }
+
+    s.server = server
+    return nil
+}
+
+// 停止网络服务
+func (s *TcpService) Stop() error {
+    if s.server != nil {
+        if err := s.server.Stop(); err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+```
+
+#### 消息处理器实现
+
+```go
+// 网络消息处理器
+type NetHandler func(session interface{}, packet *zNet.NetPacket) error
+
+// 玩家网络消息处理器
+func PlayerNetHandler(session interface{}, packet *zNet.NetPacket) error {
+    // 解析消息
+    msgId := packet.MessageID
+    data := packet.Data
+
+    // 处理消息
+    switch msgId {
+    case protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN:
+        return handleLogin(session, data)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGOUT:
+        return handleLogout(session, data)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_ATTACK:
+        return handleAttack(session, data)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_MOVE:
+        return handleMove(session, data)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_SKILL:
+        return handleSkill(session, data)
+
+    default:
+        return errors.New("未知消息ID: " + strconv.Itoa(int(msgId)))
+    }
+}
+
+// 处理玩家登录
+func handleLogin(session interface{}, data []byte) error {
+    // 解析登录请求
+    var req protocol.PlayerAccountLoginRequest
+    if err := proto.Unmarshal(data, &req); err != nil {
+        return err
+    }
+
+    // 创建玩家对象
+    player, err := player.NewPlayer(req.AccountID, req.PlayerID)
+    if err != nil {
+        return err
+    }
+
+    // 关联会话
+    player.SetSession(session.(*zNet.TcpServerSession))
+
+    // 初始化玩家组件
+    player.InitComponents()
+
+    // 创建玩家Actor
+    actor := player.NewPlayerActor(player)
+    player.SetActor(actor)
+
+    // 存储玩家
+    playerStorage.StorePlayer(player)
+
+    // 发送登录成功
+    resp := &protocol.PlayerAccountLoginResponse{
+        Success: true,
+        AccountInfo: &protocol.PlayerAccountInfo{
+            AccountID: req.AccountID,
+            PlayerID:  req.PlayerID,
+        },
+    }
+    return session.(*zNet.TcpServerSession).Send(resp)
+}
+
+// 处理玩家攻击
+func handleAttack(session interface{}, data []byte) error {
+    // 解析攻击请求
+    var req protocol.PlayerAttackRequest
+    if err := proto.Unmarshal(data, &req); err != nil {
+        return err
+    }
+
+    // 获取玩家Actor
+    playerActor, exists := player.GetPlayerActor(req.PlayerID)
+    if !exists {
+        return errors.New("玩家不存在")
+    }
+
+    // 发送攻击消息到玩家Actor
+    msg := actor.NewMessage(protocol.PlayerMsgId_MSG_PLAYER_ATTACK, data)
+    return playerActor.Send(msg)
+}
+```
+
+### 2. 玩家Actor实现
+
+```go
+// PlayerActor结构体
+type PlayerActor struct {
+    *zActor.BaseActor
+    Player *Player
+}
+
+// 创建PlayerActor
+func NewPlayerActor(player *Player) *PlayerActor {
+    pa := &PlayerActor{
+        BaseActor: *zActor.NewBaseActor("player", player.GetPlayerId()),
+        Player:    player,
+    }
+
+    // 启动消息处理循环
+    go pa.Run()
+
+    return pa
+}
+
+// 消息处理循环
+func (pa *PlayerActor) Run() {
+    for {
+        select {
+        case msg := <-pa.Mailbox:
+            // 处理网络消息
+            pa.handleMessage(msg)
+
+        case <-time.After(time.Second / 10): // 100ms tick
+            // 玩家主循环
+            pa.update()
+        }
+    }
+}
+
+// 处理网络消息
+func (pa *PlayerActor) handleMessage(msg *zActor.Message) {
+    switch msg.Type {
+    case protocol.PlayerMsgId_MSG_PLAYER_ATTACK:
+        pa.handleAttack(msg)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_MOVE:
+        pa.handleMove(msg)
+
+    case protocol.PlayerMsgId_MSG_PLAYER_SKILL:
+        pa.handleSkill(msg)
+
+    default:
+        // 处理其他消息
+    }
+}
+
+// 处理玩家攻击
+func (pa *PlayerActor) handleAttack(msg *zActor.Message) {
+    // 解析攻击请求
+    var req protocol.PlayerAttackRequest
+    if err := proto.Unmarshal(msg.Data, &req); err != nil {
+        pa.logger.Error("解析攻击请求失败", zap.Error(err))
+        return
+    }
+
+    // 获取目标玩家
+    targetPlayer, exists := player.GetPlayer(req.TargetID)
+    if !exists {
+        pa.sendToClient(&protocol.PlayerAttackResponse{
+            Success: false,
+            ErrorMsg: "目标不存在",
+        })
+        return
+    }
+
+    // 处理攻击
+    combatSystem.HandleAttack(pa.Player, targetPlayer)
+}
+
+// 处理玩家移动
+func (pa *PlayerActor) handleMove(msg *zActor.Message) {
+    // 解析移动请求
+    var req protocol.PlayerMoveRequest
+    if err := proto.Unmarshal(msg.Data, &req); err != nil {
+        pa.logger.Error("解析移动请求失败", zap.Error(err))
+        return
+    }
+
+    // 更新玩家位置
+    pa.Player.SetPosition(req.PositionX, req.PositionY, req.PositionZ)
+
+    // 发送移动结果
+    pa.sendToClient(&protocol.PlayerMoveResponse{
+        Success: true,
+    })
+}
+
+// 玩家主循环
+func (pa *PlayerActor) update() {
+    // 更新玩家组件
+    pa.Player.Update(0.1) // 100ms
+
+    // 处理玩家状态
+    pa.handlePlayerState()
+
+    // 同步玩家数据到客户端
+    pa.syncPlayerData()
+}
+
+// 同步玩家数据
+func (pa *PlayerActor) syncPlayerData() {
+    // 构建玩家数据
+    playerData := &protocol.PlayerData{
+        PlayerID:  pa.Player.GetPlayerId(),
+        Level:     int32(pa.Player.GetComponent("baseinfo").(player.IBaseInfo).GetLevel()),
+        Exp:       int64(pa.Player.GetComponent("baseinfo").(player.IBaseInfo).GetExp()),
+        Gold:      int64(pa.Player.GetComponent("baseinfo").(player.IBaseInfo).GetGold()),
+        PositionX: pa.Player.GetComponent("position").(player.IPosition).GetX(),
+        PositionY: pa.Player.GetComponent("position").(player.IPosition).GetY(),
+        PositionZ: pa.Player.GetComponent("position").(player.IPosition).GetZ(),
+    }
+
+    // 发送到客户端
+    pa.sendToClient(&protocol.PlayerSyncResponse{
+        Success:  true,
+        PlayerData: playerData,
+    })
+}
+
+// 发送消息到客户端
+func (pa *PlayerActor) sendToClient(resp interface{}) error {
+    if pa.Player.GetSession() == nil {
+        return errors.New("会话不存在")
+    }
+
+    return pa.Player.GetSession().Send(resp)
+}
+```
+
+### 3. 数据库模块实现
+
+#### 数据库管理器实现
+
+```go
+// 数据库管理器
+type DBManager struct {
+    accountDB *db.MongoConnector
+    gameDB    *db.MongoConnector
+    logDB     *db.MongoConnector
+    mu        sync.RWMutex
+}
+
+// 创建数据库管理器
+func NewDBManager(accountConfig *db.MongoConfig, gameConfig *db.MongoConfig, logConfig *db.MongoConfig) *DBManager {
+    return &DBManager{
+        accountDB: db.NewMongoConnector(accountConfig),
+        gameDB:    db.NewMongoConnector(gameConfig),
+        logDB:     db.NewMongoConnector(logConfig),
+    }
+}
+
+// 初始化数据库
+func (m *DBManager) Init() error {
+    // 初始化账号数据库
+    if err := m.accountDB.Init(); err != nil {
+        return err
+    }
+
+    // 初始化游戏数据库
+    if err := m.gameDB.Init(); err != nil {
+        return err
+    }
+
+    // 初始化日志数据库
+    if err := m.logDB.Init(); err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// 关闭数据库
+func (m *DBManager) Close() error {
+    if err := m.accountDB.Close(); err != nil {
+        return err
+    }
+
+    if err := m.gameDB.Close(); err != nil {
+        return err
+    }
+
+    if err := m.logDB.Close(); err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// 获取账号数据库
+func (m *DBManager) GetAccountDB() *db.MongoConnector {
+    return m.accountDB
+}
+
+// 获取游戏数据库
+func (m *DBManager) GetGameDB() *db.MongoConnector {
+    return m.gameDB
+}
+
+// 获取日志数据库
+func (m *DBManager) GetLogDB() *db.MongoConnector {
+    return m.logDB
+}
+```
+
+#### 账号仓库实现
+
+```go
+// 账号仓库
+type AccountRepository struct {
+    db *db.MongoConnector
+}
+
+// 创建账号仓库
+func NewAccountRepository(db *db.MongoConnector) *AccountRepository {
+    return &AccountRepository{
+        db: db,
+    }
+}
+
+// 创建账号
+func (r *AccountRepository) CreateAccount(account *models.Account) error {
+    collection := r.db.GetDB().Collection("accounts")
+
+    // 插入数据
+    _, err := collection.InsertOne(context.Background(), account)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// 查询账号
+func (r *AccountRepository) GetAccount(accountID string) (*models.Account, error) {
+    collection := r.db.GetDB().Collection("accounts")
+
+    // 查询数据
+    var account models.Account
+    err := collection.FindOne(context.Background(), bson.M{"account_id": accountID}).Decode(&account)
+    if err != nil {
+        return nil, err
+    }
+
+    return &account, nil
+}
+
+// 更新账号
+func (r *AccountRepository) UpdateAccount(account *models.Account) error {
+    collection := r.db.GetDB().Collection("accounts")
+
+    // 更新数据
+    _, err := collection.UpdateOne(
+        context.Background(),
+        bson.M{"account_id": account.AccountID},
+        bson.M{"$set": bson.M{
+            "password": account.Password,
+            "status":   account.Status,
+        }},
+    )
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// 删除账号
+func (r *AccountRepository) DeleteAccount(accountID string) error {
+    collection := r.db.GetDB().Collection("accounts")
+
+    // 删除数据
+    _, err := collection.DeleteOne(context.Background(), bson.M{"account_id": accountID})
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// 异步查询账号
+func (r *AccountRepository) GetAccountAsync(accountID string, callback func(*models.Account, error)) {
+    go func() {
+        account, err := r.GetAccount(accountID)
+        callback(account, err)
+    }()
+}
+```
+
+---
+
+## 📚 新手使用指引
+
+### 快速开始
+
+#### 步骤1：环境准备
+
+```bash
+# 安装Go环境
+# 下载并安装：https://golang.org/dl/
+go version  # 验证安装
+
+# 配置GOPATH
+export GOPATH=~/go
+export PATH=$PATH:$GOPATH/bin
+
+# 安装依赖管理工具
+go install github.com/golang/dlv/cmd/dlv@latest
+go install github.com/cosmtrek/air@latest
+```
+
+#### 步骤2：克隆项目
 
 ```bash
 git clone https://github.com/pzqf/zGameServer.git
 cd zGameServer
-```
 
-### 步骤3：配置项目
-
-1. **配置Go模块**
-
-```bash
+# 安装依赖
 go mod tidy
 ```
 
-2. **配置数据库**
-
-- 打开 `config.ini` 文件
-- 配置数据库连接信息：
-
-```ini
-[database.account]
-host = localhost
-port = 27017
-user = 
-password = 
-dbname = account
-charset = 
-max_idle = 10
-max_open = 100
-driver = mongo
-uri = mongodb://localhost:27017/account
-max_pool_size = 100
-min_pool_size = 10
-connect_timeout = 30
-
-[database.game]
-host = localhost
-port = 27017
-user = 
-password = 
-dbname = game
-charset = 
-max_idle = 10
-max_open = 100
-driver = mongo
-uri = mongodb://localhost:27017/game
-max_pool_size = 100
-min_pool_size = 10
-connect_timeout = 30
-
-[database.log]
-host = localhost
-port = 27017
-user = 
-password = 
-dbname = log
-charset = 
-max_idle = 10
-max_open = 100
-driver = mongo
-uri = mongodb://localhost:27017/log
-max_pool_size = 100
-min_pool_size = 10
-connect_timeout = 30
-```
-
-3. **配置Excel表格**
-
-- 确保 `resources/excel_tables/` 目录下有所有必要的Excel配置表
-- 根据游戏需求修改配置表内容
-
-### 步骤4：运行项目
-
-1. **编译项目**
+#### 步骤3：配置项目
 
 ```bash
-go build -o gameserver main.go
+# 配置数据库
+# 打开 config.ini 文件
+# 配置数据库连接信息
+
+# 配置Excel表格
+# 确保 resources/excel_tables/ 目录下有所有必要的Excel配置表
+
+# 运行数据库迁移
+# 根据需要创建数据库表结构
 ```
 
-2. **运行服务器**
+#### 步骤4：运行项目
 
 ```bash
-./gameserver
-```
+# 编译项目
+go build -o zGameServer.exe .
 
-3. **运行测试客户端**
+# 运行服务器
+./zGameServer.exe
 
-```bash
+# 运行测试客户端
 go run client/testclient.go
 ```
 
-### 步骤5：测试服务器
+### 模块使用示例
 
-1. **检查日志**
-   - 查看 `logs/server.log` 文件
-   - 确认服务器正常启动
-
-2. **测试网络连接**
-   - 使用telnet测试TCP连接：`telnet localhost 8888`
-   - 使用浏览器测试HTTP连接：http://localhost:8080/metrics
-
-3. **查看监控指标**
-   - 访问Prometheus指标端点：http://localhost:8080/metrics
-   - 查看服务器运行状态
-
-### 步骤6：开始开发
-
-1. **了解项目结构**
-
-- 阅读本README文件
-- 查看源代码注释和示例代码
-- 浏览源代码，了解各模块功能
-
-2. **学习核心模块**
-
-- **网络模块**：`net/service/tcp_service.go`
-- **玩家系统**：`game/player/player.go`
-- **战斗系统**：`game/systems/combat/combat_system.go`
-- **配置系统**：`config/ini_config.go`
-
-3. **参与开发**
-
-- 选择一个模块进行学习
-- 阅读相关代码和文档
-- 尝试修改代码并测试
-- 提交代码到版本控制系统
-
-## 开发指南
-
-### 1. 依赖注入容器使用
-
-#### 1.1 注册依赖
+#### 1. 玩家系统使用
 
 ```go
-import (
-    "github.com/pzqf/zEngine/zInject"
-)
+// 创建玩家
+player, err := player.NewPlayer(accountID, playerID)
+if err != nil {
+    return err
+}
 
-// 创建依赖注入容器
-container := zInject.NewContainer()
+// 初始化玩家组件
+player.InitComponents()
 
-// 注册单例依赖
-container.RegisterSingleton("config", configInstance)
+// 创建玩家Actor
+actor := player.NewPlayerActor(player)
+player.SetActor(actor)
 
-// 注册工厂依赖
-container.Register("playerService", func() interface{} {
-    return NewPlayerService()
+// 存储玩家
+playerStorage.StorePlayer(player)
+
+// 获取玩家组件
+baseInfo := player.GetComponent("baseinfo").(player.IBaseInfo)
+inventory := player.GetComponent("inventory").(player.IInventory)
+equipment := player.GetComponent("equipment").(player.IEquipment)
+
+// 使用组件
+level := baseInfo.GetLevel()
+exp := baseInfo.GetExp()
+gold := baseInfo.GetGold()
+
+// 发送消息到玩家Actor
+msg := actor.NewMessage(protocol.PlayerMsgId_MSG_PLAYER_ATTACK, data)
+actor.Send(msg)
+```
+
+#### 2. 战斗系统使用
+
+```go
+// 创建战斗系统
+combatSystem := NewCombatSystem()
+
+// 处理攻击
+combatSystem.HandleAttack(attackerPlayer, targetPlayer)
+
+// 计算伤害
+damage := combatSystem.CalculateDamage(attackerPlayer, targetPlayer)
+
+// 暴击判定
+if combatSystem.IsCritical(attackerPlayer) {
+    damage *= 2
+}
+
+// 处理伤害
+targetPlayer.GetComponent("baseinfo").(player.IBaseInfo).SubHP(damage)
+
+// 发布战斗事件
+event := NewEvent(EventTypePlayerAttack, &PlayerAttackEvent{
+    AttackerID: attackerPlayer.GetPlayerId(),
+    TargetID:   targetPlayer.GetPlayerId(),
+    Damage:     damage,
 })
+eventBus.Publish(event)
 ```
 
-#### 1.2 解析依赖
+#### 3. 公会系统使用
 
 ```go
-// 解析单例依赖
-config, err := container.Resolve("config")
+// 创建公会系统
+guildSystem := NewGuildSystem()
+
+// 创建公会
+guild, err := guildSystem.CreateGuild(leaderPlayer, guildName)
 if err != nil {
-    // 处理错误
+    return err
 }
 
-// 解析工厂依赖
-playerService, err := container.Resolve("playerService")
+// 加入公会
+err := guildSystem.JoinGuild(guildID, player)
 if err != nil {
-    // 处理错误
+    return err
 }
-```
 
-#### 1.3 在GameServer中使用
-
-```go
-// 注册核心依赖
-gameServer.RegisterSingleton("protocol", protolayer.NewProtobufProtocol())
-
-// 解析依赖
-protocol, err := gameServer.ResolveDependency("protocol")
+// 离开公会
+err := guildSystem.LeaveGuild(guildID, player)
 if err != nil {
-    // 处理错误
+    return err
 }
-```
 
-### 2. 服务管理使用
-
-#### 2.1 注册服务
-
-```go
-// 注册服务到GameServer
-gameServer.RegisterService(func() zService.Service {
-    return NewPlayerService()
-})
-
-// 注册带依赖的服务
-gameServer.RegisterService(func() zService.Service {
-    return NewGuildService()
-}, "playerService") // 依赖playerService
-```
-
-#### 2.2 自动注册服务
-
-```go
-// 自动注册所有已注册的服务
-err := gameServer.AutoRegisterServices()
+// 升级公会
+err := guildSystem.UpgradeGuild(guildID)
 if err != nil {
-    // 处理错误
+    return err
+}
+
+// 获取公会信息
+guildInfo, err := guildSystem.GetGuildInfo(guildID)
+if err != nil {
+    return err
 }
 ```
 
-### 3. 接入新网络消息
+### 开发指南
 
-#### 步骤1：定义协议
-
-1. 在 `net/protocol/game.proto` 文件中添加新的消息类型：
-
-```proto
-// 示例：添加公会创建请求和响应消息
-message CreateGuildRequest {
-    string guild_name = 1;      // 公会名称
-    string guild_emblem = 2;    // 公会徽章
-}
-
-message CreateGuildResponse {
-    int32 result = 1;           // 结果（0成功，非0失败）
-    int64 guild_id = 2;         // 公会ID
-    string error_message = 3;   // 错误信息
-}
-```
-
-#### 步骤2：生成Go代码
-
-执行以下命令生成Go代码：
-
-```bash
-protoc --go_out=. net/protocol/game.proto
-```
-
-#### 步骤3：创建消息处理器
-
-在 `net/handler/` 目录下创建新的处理器文件，如 `guild_handler.go`：
+#### 1. 代码规范
 
 ```go
-package handler
+// 结构体命名：大驼峰式
+type Player struct {
+    // 字段命名：小驼峰式（包内可见）
+    playerId int64
+    // 私有字段：小驼峰式
+    session *zNet.TcpServerSession
+}
 
-import (
-    "github.com/pzqf/zGameServer/game/guild"
-    "github.com/pzqf/zGameServer/net/protocol"
+// 函数命名：大驼峰式
+func NewPlayer(accountID, playerID string) *Player {
+    return &Player{
+        accountID: accountID,
+        playerID:  playerID,
+    }
+}
+
+// 方法命名：大驼峰式
+func (p *Player) GetPlayerId() string {
+    return p.playerID
+}
+
+// 接口命名：大驼峰式，以I开头
+type IBaseInfo interface {
+    GetLevel() int
+    GetExp() int64
+    GetGold() int64
+}
+
+// 常量命名：大驼峰式
+const (
+    PlayerStatusOffline = 0
+    PlayerStatusOnline  = 1
 )
 
-// HandleCreateGuild 处理创建公会请求
-func (h *GameHandler) HandleCreateGuild(request *protocol.CreateGuildRequest, session interface{}) {
-    // 获取会话信息
-    playerSession := session.(*PlayerSession)
-    playerId := playerSession.PlayerId
-  
-    // 调用公会服务创建公会
-    guildId, err := guild.GetGuildService().CreateGuild(playerId, request.GuildName, request.GuildEmblem)
-  
-    // 构建响应
-    response := &protocol.CreateGuildResponse{
-        Result: 0,
-        GuildId: guildId,
-    }
-  
-    if err != nil {
-        response.Result = 1
-        response.ErrorMessage = err.Error()
-    }
-  
-    // 发送响应
-    playerSession.SendMessage(response)
-}
+// 变量命名：小驼峰式
+var playerCount int
+
+// 全局变量：首字母大写，公开
+var PlayerStorage *PlayerStorage
+
+// 私有变量：首字母小写，不公开
+var playerMap map[int64]*Player
 ```
 
-#### 步骤4：注册消息路由
-
-在 `net/router/router.go` 文件中注册新的消息路由：
+#### 2. 错误处理
 
 ```go
-// 注册消息路由
-func (r *GameRouter) RegisterRoutes() {
-    // 现有路由...
-  
-    // 注册公会相关路由
-    r.RegisterRoute("CreateGuildRequest", h.HandleCreateGuild)
+// 返回错误，而不是panic
+func DoSomething() error {
+    // 检查错误
+    if err != nil {
+        return err
+    }
+
+    // 处理错误
+    return nil
+}
+
+// 调用错误处理
+if err := DoSomething(); err != nil {
+    // 记录错误
+    logger.Error("Failed to do something", zap.Error(err))
+    // 返回错误
+    return err
+}
+
+// 使用错误链
+if err := DoSomething(); err != nil {
+    return fmt.Errorf("failed to do something: %w", err)
 }
 ```
 
-#### 步骤5：在客户端实现
-
-在客户端代码中实现对应的消息发送和处理逻辑。
-
-### 4. 增加读写数据库代码
-
-#### 步骤1：定义数据模型
-
-在 `db/models/` 目录下创建新的数据模型文件，如 `guild_model.go`：
+#### 3. 并发控制
 
 ```go
-package models
+// 互斥锁
+var mu sync.Mutex
 
-import (
-    "time"
-)
+func (s *Service) Process() {
+    mu.Lock()
+    defer mu.Unlock()
 
-// Guild 公会数据模型
-type Guild struct {
-    GuildId        int64     `json:"guild_id" gorm:"primaryKey"`
-    GuildName      string    `json:"guild_name" gorm:"size:50;not null"`
-    GuildEmblem    string    `json:"guild_emblem" gorm:"size:255"`
-    LeaderId       int64     `json:"leader_id" gorm:"not null"`
-    Level          int       `json:"level" gorm:"default:1"`
-    Exp            int64     `json:"exp" gorm:"default:0"`
-    MemberCount    int       `json:"member_count" gorm:"default:1"`
-    MaxMembers     int       `json:"max_members" gorm:"default:20"`
-    Notice         string    `json:"notice" gorm:"size:500"`
-    CreateTime     time.Time `json:"create_time" gorm:"autoCreateTime"`
-    LastUpdateTime time.Time `json:"last_update_time" gorm:"autoUpdateTime"`
+    // 临界区代码
 }
 
-// TableName 指定表名
-func (Guild) TableName() string {
-    return "guilds"
+// 读写锁
+var rwmu sync.RWMutex
+
+func (s *Service) Get() {
+    rwmu.RLock()
+    defer rwmu.RUnlock()
+
+    // 读操作
 }
 
-// GuildMember 公会成员数据模型
-type GuildMember struct {
-    Id            int64     `json:"id" gorm:"primaryKey;autoIncrement"`
-    GuildId       int64     `json:"guild_id" gorm:"index;not null"`
-    PlayerId      int64     `json:"player_id" gorm:"index;not null"`
-    Name          string    `json:"name" gorm:"size:50;not null"`
-    Position      int       `json:"position" gorm:"not null"` // 职位：0普通成员，1官员，2副会长，3会长
-    Contribution  int64     `json:"contribution" gorm:"default:0"`
-    JoinTime      int64     `json:"join_time" gorm:"not null"`
-    LastOnline    int64     `json:"last_online" gorm:"not null"`
-    CreateTime    time.Time `json:"create_time" gorm:"autoCreateTime"`
-    LastUpdateTime time.Time `json:"last_update_time" gorm:"autoUpdateTime"`
+func (s *Service) Set() {
+    rwmu.Lock()
+    defer rwmu.Unlock()
+
+    // 写操作
 }
 
-// TableName 指定表名
-func (GuildMember) TableName() string {
-    return "guild_members"
-}
-```
+// 原子操作
+var counter atomic.Int32
 
-#### 步骤2：创建数据访问对象（DAO）
-
-在 `db/dao/` 目录下创建新的DAO文件，如 `guild_dao.go`：
-
-```go
-package dao
-
-import (
-    "github.com/pzqf/zGameServer/db/models"
-)
-
-// GuildDAO 公会数据访问对象
-type GuildDAO struct {
-    BaseDAO
+func (s *Service) Increment() {
+    counter.Add(1)
 }
 
-// NewGuildDAO 创建公会DAO实例
-func NewGuildDAO() *GuildDAO {
-    return &GuildDAO{}
+// 通道通信
+type Worker struct {
+    jobChan chan Job
+    stopChan chan struct{}
+    wg sync.WaitGroup
 }
 
-// Create 创建公会记录
-func (dao *GuildDAO) Create(guild *models.Guild) error {
-    return dao.DB.Create(guild).Error
-}
-
-// GetByID 根据ID获取公会
-func (dao *GuildDAO) GetByID(guildId int64) (*models.Guild, error) {
-    var guild models.Guild
-    err := dao.DB.First(&guild, guildId).Error
-    if err != nil {
-        return nil, err
+func (w *Worker) Loop() {
+    for {
+        select {
+        case job := <-w.jobChan:
+            // 处理任务
+        case <-w.stopChan:
+            return
+        }
     }
-    return &guild, nil
-}
-
-// Update 更新公会信息
-func (dao *GuildDAO) Update(guild *models.Guild) error {
-    return dao.DB.Save(guild).Error
-}
-
-// Delete 删除公会
-func (dao *GuildDAO) Delete(guildId int64) error {
-    return dao.DB.Delete(&models.Guild{}, guildId).Error
-}
-
-// GuildMemberDAO 公会成员数据访问对象
-type GuildMemberDAO struct {
-    BaseDAO
-}
-
-// NewGuildMemberDAO 创建公会成员DAO实例
-func NewGuildMemberDAO() *GuildMemberDAO {
-    return &GuildMemberDAO{}
-}
-
-// Create 创建公会成员记录
-func (dao *GuildMemberDAO) Create(member *models.GuildMember) error {
-    return dao.DB.Create(member).Error
-}
-
-// GetByGuildID 获取公会所有成员
-func (dao *GuildMemberDAO) GetByGuildID(guildId int64) ([]*models.GuildMember, error) {
-    var members []*models.GuildMember
-    err := dao.DB.Where("guild_id = ?", guildId).Find(&members).Error
-    if err != nil {
-        return nil, err
-    }
-    return members, nil
-}
-
-// GetByPlayerID 根据玩家ID获取公会成员信息
-func (dao *GuildMemberDAO) GetByPlayerID(playerId int64) (*models.GuildMember, error) {
-    var member models.GuildMember
-    err := dao.DB.Where("player_id = ?", playerId).First(&member).Error
-    if err != nil {
-        return nil, err
-    }
-    return &member, nil
-}
-
-// Update 更新公会成员信息
-func (dao *GuildMemberDAO) Update(member *models.GuildMember) error {
-    return dao.DB.Save(member).Error
-}
-
-// Delete 删除公会成员
-func (dao *GuildMemberDAO) Delete(guildId int64, playerId int64) error {
-    return dao.DB.Where("guild_id = ? AND player_id = ?", guildId, playerId).Delete(&models.GuildMember{}).Error
 }
 ```
-
-#### 步骤3：在服务中使用DAO
-
-在服务代码中使用DAO进行数据库操作：
-
-```go
-package guild
-
-import (
-    "github.com/pzqf/zGameServer/db/dao"
-    "github.com/pzqf/zGameServer/db/models"
-)
-
-// CreateGuild 创建公会
-func (gs *GuildService) CreateGuild(leaderId int64, guildName string, guildEmblem string) (int64, error) {
-    // 生成公会ID
-    guildId := generateGuildId()
-  
-    // 创建公会数据模型
-    guildModel := &models.Guild{
-        GuildId:     guildId,
-        GuildName:   guildName,
-        GuildEmblem: guildEmblem,
-        LeaderId:    leaderId,
-        Level:       1,
-        Exp:         0,
-        MemberCount: 1,
-        MaxMembers:  20,
-        Notice:      "",
-    }
-  
-    // 保存到数据库
-    guildDAO := dao.NewGuildDAO()
-    if err := guildDAO.Create(guildModel); err != nil {
-        return 0, err
-    }
-  
-    // 创建公会对象并缓存
-    guild := NewGuild(guildModel)
-    gs.guilds.Store(guildId, guild)
-  
-    return guildId, nil
-}
-```
-
-## 配置文件
-
-### 1. ini配置文件
-
-`config.ini`：服务器基本配置，包括：
-
-- 服务器基本配置（监听地址、端口、最大连接数等）
-- HTTP配置（基于zNet.HttpConfig）：包括监听地址、最大客户端数、最大数据包大小等
-- 日志配置（基于zLog.Config）：包括级别、路径、文件大小、最大天数等
-- **DDoS保护配置**：包括每个IP的最大连接数、最大数据包数、最大流量、封禁时间等
-- 数据库配置（MySQL和MongoDB连接信息）
-
-### 2. Excel配置表
-
-`resources/excel_tables/`：游戏数据配置，包括：
-
-- `item.xlsx`：物品配置
-- `skill.xlsx`：技能配置
-- `monster.xlsx`：怪物配置
-- `npc.xlsx`：NPC配置
-- `pet.xlsx`：宠物配置
-- `guild.xlsx`：公会配置
-- `quest.xlsx`：任务配置
-- `map.xlsx`：地图配置
-- `shop.xlsx`：商店配置
-- `player_level.xlsx`：玩家等级配置
-
-## 快速开始
-
-### 1. 环境要求
-
-- Go 1.25.5+ 或更高版本
-- MySQL 5.7+ 或更高版本
-- MongoDB 4.0+ 或更高版本（可选）
-
-### 2. 安装依赖
-
-```bash
-go mod download
-```
-
-### 3. 配置数据库
-
-1. 创建数据库：
-
-   - MySQL：创建账号、游戏和日志数据库
-   - MongoDB：创建游戏数据库（可选）
-2. 在 `config.ini` 中配置数据库连接信息
-
-### 4. 配置Excel表格
-
-- 确保 `resources/excel_tables/` 目录下有所有必要的Excel配置表
-- 根据游戏需求修改配置表内容
-
-### 5. 编译和运行
-
-```bash
-# 编译
-go build -o gameserver main.go
-
-# 运行
-./gameserver
-```
-
-### 6. 客户端测试
-
-```bash
-go run client/testclient.go
-```
-
-## 架构优势
-
-### 1. 高并发支持
-
-- **Actor模型**：单线程处理，避免竞态条件
-- **协程调度**：Goroutine轻量级并发
-- **无锁设计**：原子操作、无锁数据结构
-
-### 2. 易维护性
-
-- **ECS架构**：数据与逻辑分离
-- **模块化设计**：低耦合、高内聚
-- **依赖注入**：组件依赖解耦
-
-### 3. 易扩展
-
-- **服务插件化**：动态加载/卸载服务
-- **协议扩展**：支持多种数据格式
-- **配置驱动**：Excel配置表灵活修改
-
-### 4. 监控完善
-
-- **多维度指标**：网络、业务、系统
-- **可视化监控**：Prometheus集成
-- **异常报警**：错误自动捕获
-
-## 总结
-
-这个游戏服务器系统是一个**设计精良、架构合理**的企业级解决方案，主要特点：
-
-1. **分层设计**：业务层 → 引擎层 → 工具层，职责清晰
-2. **模式运用**：Actor、ECS、事件驱动、对象池等成熟模式
-3. **高性能**：Goroutine、对象池、缓存优化等
-4. **高并发**：消息驱动、无锁设计、原子操作
-
-## 许可证
-
-MIT
-
-## 贡献
-
-欢迎提交Issue和Pull Request！
-
-## 联系方式
-
-如果您有任何问题或建议，欢迎通过GitHub Issues与我们联系。
 
 ---
 
-**zGameServer** - 简单高效的游戏服务器框架，为您的游戏提供强大的基础架构支持！
+## 🎯 最佳实践
 
+### 1. 性能优化
+
+#### 网络性能优化
+
+1. **连接复用** - 使用连接池，减少连接创建销毁开销
+2. **批量处理** - 批量发送/接收数据，减少系统调用
+3. **零拷贝** - 避免不必要的数据复制
+4. **异步I/O** - 使用非阻塞I/O，提高并发处理能力
+5. **内存池** - 减少内存分配和GC压力
+
+```go
+// 连接池实现
+type ConnectionPool struct {
+    pool  chan *Connection
+    newFunc func() *Connection
+    mu    sync.Mutex
+}
+
+func (cp *ConnectionPool) Get() *Connection {
+    select {
+    case conn := <-cp.pool:
+        return conn
+    default:
+        return cp.newFunc()
+    }
+}
+
+func (cp *ConnectionPool) Put(conn *Connection) {
+    select {
+    case cp.pool <- conn:
+    default:
+        // 池已满，关闭连接
+        conn.Close()
+    }
+}
+```
+
+#### 数据库性能优化
+
+1. **连接池** - 使用连接池管理数据库连接
+2. **批量操作** - 批量插入、更新数据
+3. **查询优化** - 使用索引，避免全表扫描
+4. **缓存策略** - 缓存热点数据
+5. **异步查询** - 使用异步查询，避免阻塞
+
+```go
+// 数据库连接池
+type DBConnectionPool struct {
+    pool  chan *sql.DB
+    newFunc func() *sql.DB
+    mu    sync.Mutex
+}
+
+func (cp *DBConnectionPool) Get() *sql.DB {
+    select {
+    case db := <-cp.pool:
+        return db
+    default:
+        return cp.newFunc()
+    }
+}
+
+func (cp *DBConnectionPool) Put(db *sql.DB) {
+    select {
+    case cp.pool <- db:
+    default:
+        // 池已满，关闭连接
+        db.Close()
+    }
+}
+
+// 异步查询
+func (r *AccountRepository) GetAccountAsync(accountID string, callback func(*models.Account, error)) {
+    go func() {
+        account, err := r.GetAccount(accountID)
+        callback(account, err)
+    }()
+}
+```
+
+#### 玩家性能优化
+
+1. **对象池** - 使用对象池管理玩家对象
+2. **组件预创建** - 预创建玩家组件
+3. **批量同步** - 批量同步玩家数据
+4. **状态压缩** - 压缩玩家状态数据
+5. **事件合并** - 合并玩家事件
+
+```go
+// 玩家对象池
+type PlayerPool struct {
+    pool  chan *Player
+    newFunc func() *Player
+    mu    sync.Mutex
+}
+
+func (pp *PlayerPool) Get() *Player {
+    select {
+    case player := <-pp.pool:
+        return player
+    default:
+        return pp.newFunc()
+    }
+}
+
+func (pp *PlayerPool) Put(player *Player) {
+    select {
+    case pp.pool <- player:
+    default:
+        // 池已满，丢弃
+    }
+}
+
+// 批量同步玩家数据
+func (pa *PlayerActor) syncPlayerData() {
+    // 构建玩家数据
+    playerData := &protocol.PlayerData{
+        PlayerID:  pa.Player.GetPlayerId(),
+        Level:     int32(pa.Player.GetComponent("baseinfo").(player.IBaseInfo).GetLevel()),
+        Exp:       int64(pa.Player.GetComponent("baseinfo").(player.IBaseInfo).GetExp()),
+        Gold:      int64(pa.Player.GetComponent("baseinfo").(player.IBaseInfo).GetGold()),
+        PositionX: Player.GetComponent("position").(player.IPosition).GetX(),
+        PositionY: Player.GetComponent("position").(player.IPosition).GetY(),
+        PositionZ: Player.GetComponent("position").(player.IPosition).GetZ(),
+    }
+
+    // 发送到客户端
+    pa.sendToClient(&protocol.PlayerSyncResponse{
+        Success:  true,
+        PlayerData: playerData,
+    })
+}
+```
+
+### 2. 安全性最佳实践
+
+#### 网络安全
+
+1. **连接限制** - 限制每个IP的连接数
+2. **流量限制** - 限制每个连接的流量
+3. **数据包验证** - 验证数据包格式和内容
+4. **加密通信** - 使用TLS加密数据传输
+
+```go
+// DDoS防护
+type DdosProtector struct {
+    ipMap map[string]*IpInfo
+    mu    sync.RWMutex
+}
+
+func (dp *DdosProtector) Allow(ip string) bool {
+    dp.mu.RLock()
+    info, exists := dp.ipMap[ip]
+    dp.mu.RUnlock()
+
+    if !exists {
+        return true
+    }
+
+    // 检查连接数
+    if info.ConnCount > 100 {
+        return false
+    }
+
+    // 检查流量
+    if info.Traffic > 100*1024*1024 {
+        return false
+    }
+
+    return true
+}
+```
+
+#### 代码安全
+
+1. **输入验证** - 验证所有外部输入
+2. **SQL注入防护** - 使用参数化查询
+3. **XSS防护** - 过滤用户输入
+4. **CSRF防护** - 使用Token验证
+
+```go
+// 输入验证
+func ValidateInput(input string) error {
+    if input == "" {
+        return errors.New("输入不能为空")
+    }
+
+    if len(input) > 100 {
+        return errors.New("输入过长")
+    }
+
+    // 正则表达式验证
+    match := regexp.MustCompile(`^[a-zA-Z0-9_]+$`).MatchString(input)
+    if !match {
+        return errors.New("输入包含非法字符")
+    }
+
+    return nil
+}
+
+// 参数化查询
+func (r *AccountRepository) GetAccountAsync(accountID string, callback func(*models.Account, error)) {
+    go func() {
+        var account models.Account
+        err := r.db.QueryRow("SELECT * FROM accounts WHERE account_id = ?", accountID).
+            Scan(&account.AccountID, &account.Password, &account.Status, &account.CreateTime)
+        if err != nil {
+            callback(nil, err)
+            return
+        }
+        callback(&account, nil)
+    }()
+}
+```
+
+### 3. 可维护性最佳实践
+
+#### 代码组织
+
+1. **模块化** - 按功能划分模块
+2. **单一职责** - 每个函数/类只做一件事
+3. **接口抽象** - 使用接口，不依赖实现
+4. **依赖注入** - 通过依赖注入实现解耦
+
+```go
+// 模块化示例
+package game
+
+import (
+    "github.com/pzqf/zEngine/zActor"
+    "github.com/pzqf/zEngine/zEvent"
+)
+
+// 战斗模块
+type CombatModule struct {
+    actor *zActor.Actor
+    eventBus *zEvent.EventBus
+}
+
+// 移动模块
+type MovementModule struct {
+    actor *zActor.Actor
+    eventBus *zEvent.EventBus
+}
+
+// 技能模块
+type SkillModule struct {
+    actor *zActor.Actor
+    eventBus *zEvent.EventBus
+}
+```
+
+#### 文档编写
+
+1. **代码注释** - 注释复杂逻辑和关键算法
+2. **API文档** - 使用godoc生成API文档
+3. **README** - 项目功能和使用说明
+4. **CHANGELOG** - 版本变更记录
+
+```go
+// 战斗系统实现
+// 
+// 战斗系统负责处理玩家和怪物之间的战斗逻辑，
+// 包括攻击、防御、技能释放、状态效果等。
+// 
+// 核心功能：
+// 1. 攻击计算 - 根据属性和技能计算伤害
+// 2. 状态管理 - 管理BUFF、DEBUFF等状态
+// 3. 仇恨系统 - 管理怪物的目标选择
+// 4. 战斗结果 - 处理胜负和奖励
+// 
+// 使用示例：
+//   combat := NewCombatSystem()
+//   combat.Attack(attacker, target)
+// 
+type CombatSystem struct {
+    // 技能管理器
+    skillMgr *SkillManager
+  
+    // 状态管理器
+    statusMgr *StatusManager
+  
+    // 仇恨系统
+    aggroSystem *AggroSystem
+}
+```
+
+### 4. 监控和调试
+
+#### 性能监控
+
+```go
+// 性能监控
+type PerformanceMonitor struct {
+    counters map[string]atomic.Int64
+    timers   map[string]*Timer
+}
+
+func (pm *PerformanceMonitor) Count(name string) {
+    pm.counters[name].Add(1)
+}
+
+func (pm *PerformanceMonitor) Time(name string) *Timer {
+    timer := NewTimer()
+    pm.timers[name] = timer
+    return timer
+}
+
+// 性能统计
+type PerformanceStats struct {
+    Requests    int64
+    Errors      int64
+    AvgLatency  time.Duration
+    P95Latency  time.Duration
+    P99Latency  time.Duration
+}
+
+func (pm *PerformanceMonitor) GetStats() *PerformanceStats {
+    return &PerformanceStats{
+        Requests:    pm.counters["requests"].Load(),
+        Errors:      pm.counters["errors"].Load(),
+        AvgLatency:  pm.calculateAvgLatency(),
+        P95Latency:  pm.calculateP95Latency(),
+        P99Latency:  pm.calculateP99Latency(),
+    }
+}
+```
+
+#### 日志监控
+
+```go
+// 日志监控
+type LogMonitor struct {
+    errorChan    chan *LogEntry
+    warningChan  chan *LogEntry
+    stats        map[string]int64
+}
+
+func (lm *LogMonitor) Monitor(logger *zLog.Logger) {
+    // 订阅日志事件
+    logger.Subscribe(func(entry *LogEntry) {
+        switch entry.Level {
+        case zap.ErrorLevel:
+            lm.errorChan <- entry
+        case zap.WarnLevel:
+            lm.warningChan <- entry
+        }
+    })
+
+    // 处理错误日志
+    go func() {
+        for entry := <-lm.errorChan {
+            lm.stats["errors"]++
+            // 发送告警
+            lm.sendAlert(entry)
+        }
+    }()
+}
+```
+
+---
+
+## 📖 参考资源
+
+### 官方文档
+
+- [Go官方文档](https://golang.org/doc/)
+- [zEngine项目文档](https://github.com/pzqf/zEngine)
+- [zGameServer项目文档](https://github.com/pzqf/zGameServer)
+
+### 学习资源
+
+- **游戏服务器开发**：
+
+  - 《游戏服务器架构设计》
+  - 《多人在线游戏开发》
+- **网络编程**：
+
+  - 《Go网络编程》
+  - 《高性能网络编程》
+- **数据库**：
+
+  - 《高性能MySQL》
+  - 《MongoDB权威指南》
+
+### 相关项目
+
+- **游戏引擎**：
+
+  - [zEngine](https://github.com/pzqf/zEngine) - 基于zEngine的游戏服务器框架
+  - [zUtil](https://github.com/pzqf/zUtil) - 工具库
+- **网络库**：
+
+  - [zNet](https://github.com/pzqf/zEngine/tree/master/zNet) - 网络模块
+  - [zEvent](https://github.com/pzqf/zEngine/tree/master/zEvent) - 事件模块
+- **工具库**：
+
+  - [zLog](https://github.com/pzqf/zEngine/tree/master/zLog) - 日志模块
+  - [zActor](https://github.com/pzqf/zEngine/tree/master/zActor) - Actor模块
+
+---
+
+## 🤝 贡献指南
+
+### 如何贡献
+
+1. **Fork项目**
+2. **创建分支**
+3. **提交更改**
+4. **推送分支**
+5. **提交Pull Request**
+
+### 代码规范
+
+- 遵循Go代码规范
+- 使用gofmt格式化代码
+- 添加适当的注释
+- 编写单元测试
+
+### 提交规范
+
+- 清晰的提交信息
+- 参考conventional commits
+- 关联相关Issue
+
+---
+
+## 📄 许可证
+
+本项目采用MIT许可证。详情请参考LICENSE文件。
+
+---
+
+## 📞 联系方式
+
+如有问题或建议，欢迎通过以下方式联系：
+
+- **Issue**：https://github.com/pzqf/zGameServer/issues
+- **邮件**：pzqf@example.com
+- **Gitee**：https://gitee.com/pzqf/zGameServer
+
+---
+
+**zGameServer** - 高性能可扩展的MMO游戏服务器框架

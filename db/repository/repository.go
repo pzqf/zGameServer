@@ -6,6 +6,19 @@ import (
 
 // AccountRepository 账号数据仓库接口
 type AccountRepository interface {
+	// GetByIDAsync 根据ID异步获取账号
+	GetByIDAsync(accountID int64, callback func(*models.Account, error))
+	// GetByNameAsync 根据名称异步获取账号
+	GetByNameAsync(accountName string, callback func(*models.Account, error))
+	// CreateAsync 异步创建账号
+	CreateAsync(account *models.Account, callback func(int64, error))
+	// UpdateAsync 异步更新账号
+	UpdateAsync(account *models.Account, callback func(bool, error))
+	// DeleteAsync 异步删除账号
+	DeleteAsync(accountID int64, callback func(bool, error))
+	// UpdateLastLoginAtAsync 异步更新最后登录时间
+	UpdateLastLoginAtAsync(accountID int64, lastLoginAt string, callback func(bool, error))
+
 	// GetByID 根据ID获取账号
 	GetByID(accountID int64) (*models.Account, error)
 	// GetByName 根据名称获取账号
@@ -22,6 +35,17 @@ type AccountRepository interface {
 
 // CharacterRepository 角色数据仓库接口
 type CharacterRepository interface {
+	// GetByIDAsync 根据ID异步获取角色
+	GetByIDAsync(characterID int64, callback func(*models.Character, error))
+	// GetByAccountIDAsync 根据账号ID异步获取角色列表
+	GetByAccountIDAsync(accountID int64, callback func([]*models.Character, error))
+	// CreateAsync 异步创建角色
+	CreateAsync(character *models.Character, callback func(int64, error))
+	// UpdateAsync 异步更新角色
+	UpdateAsync(character *models.Character, callback func(bool, error))
+	// DeleteAsync 异步删除角色
+	DeleteAsync(characterID int64, callback func(bool, error))
+
 	// GetByID 根据ID获取角色
 	GetByID(characterID int64) (*models.Character, error)
 	// GetByAccountID 根据账号ID获取角色列表
@@ -36,8 +60,8 @@ type CharacterRepository interface {
 
 // LoginLogRepository 登录日志数据仓库接口
 type LoginLogRepository interface {
-	// Create 创建登录日志
-	Create(loginLog *models.LoginLog) (int64, error)
-	// GetByAccountID 根据账号ID获取登录日志列表
-	GetByAccountID(accountID int64, limit int) ([]*models.LoginLog, error)
+	// CreateAsync 异步创建登录日志
+	CreateAsync(loginLog *models.LoginLog, callback func(int64, error))
+	// GetByAccountIDAsync 根据账号ID异步获取登录日志列表
+	GetByAccountIDAsync(accountID int64, limit int, callback func([]*models.LoginLog, error))
 }

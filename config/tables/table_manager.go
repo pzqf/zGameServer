@@ -26,7 +26,10 @@ type TableManager struct {
 }
 
 // GlobalTableManager 全局表格配置管理器实例
-var GlobalTableManager *TableManager
+var (
+	GlobalTableManager *TableManager
+	tableOnce          sync.Once
+)
 
 // NewTableManager 创建表格配置管理器
 func NewTableManager() *TableManager {
@@ -69,6 +72,16 @@ func NewTableManager() *TableManager {
 		},
 		initialized: false,
 	}
+}
+
+// GetTableManager 获取全局表格配置管理器实例
+func GetTableManager() *TableManager {
+	if GlobalTableManager == nil {
+		tableOnce.Do(func() {
+			GlobalTableManager = NewTableManager()
+		})
+	}
+	return GlobalTableManager
 }
 
 // LoadAllTables 加载所有配置表格

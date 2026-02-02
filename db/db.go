@@ -1,6 +1,8 @@
 package db
 
 import (
+	"sync"
+
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/dao"
@@ -15,11 +17,24 @@ type DBManager struct {
 	LoginLogRepository  repository.LoginLogRepository
 }
 
-// NewDBManager 创建数据库管理器实例
-func NewDBManager() *DBManager {
-	return &DBManager{
-		connectors: make(map[string]connector.DBConnector),
-	}
+var (
+	dbManager *DBManager
+	dbOnce    sync.Once
+)
+
+func GetDBManager() *DBManager {
+	return dbManager
+}
+
+func InitDBManager() error {
+	var err error
+	dbOnce.Do(func() {
+		dbManager = &DBManager{
+			connectors: make(map[string]connector.DBConnector),
+		}
+		err = dbManager.Init()
+	})
+	return err
 }
 
 // Init 初始化数据库连接和所有Repository

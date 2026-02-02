@@ -2,7 +2,6 @@ package handler
 
 import (
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zGameServer/db"
 	"github.com/pzqf/zGameServer/game/auction"
 	"github.com/pzqf/zGameServer/game/guild"
 	"github.com/pzqf/zGameServer/game/maps"
@@ -15,13 +14,12 @@ func Init(router *router.PacketRouter,
 	playerService *player.PlayerService,
 	guildService *guild.GuildService,
 	auctionService *auction.AuctionService,
-	mapService *maps.MapService,
-	dbManager *db.DBManager) {
+	mapService *maps.MapService) {
 
 	zLog.Info("Initializing handlers...")
 
-	// 注册玩家处理器
-	RegisterPlayerHandlers(router, playerService, dbManager)
+	// 注册玩家网络处理器
+	RegisterPlayerNetHandlers(router, playerService)
 
 	// 注册其他模块的处理器（根据需要添加）
 	// RegisterGuildHandlers(router, guildService)

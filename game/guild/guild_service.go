@@ -33,14 +33,14 @@ func NewGuildService() *GuildService {
 
 func (gs *GuildService) Init() error {
 	gs.SetState(zService.ServiceStateInit)
-	zLog.Info("Initializing guild service...")
+	zLog.Info("Initializing guild service...", zap.String("serviceId", gs.ServiceId()))
 	// 初始化公会服务相关资源
 	return nil
 }
 
 func (gs *GuildService) Close() error {
 	gs.SetState(zService.ServiceStateStopping)
-	zLog.Info("Closing guild service...")
+	zLog.Info("Closing guild service...", zap.String("serviceId", gs.ServiceId()))
 	// 清理公会服务相关资源
 	gs.guilds.Clear()
 	gs.playerGuild.Clear()

@@ -1,0 +1,140 @@
+{
+  "nodes": [
+    {
+      "id": "n0",
+      "content": "Exit"
+    },
+    {
+      "id": "n1",
+      "content": "Entry"
+    },
+    {
+      "id": "n2",
+      "content": "IsPlayerInRange()"
+    },
+    {
+      "id": "n3",
+      "content": "IsAttackInRange()"
+    },
+    {
+      "id": "n4",
+      "content": "BasicAttack()"
+    },
+    {
+      "id": "n5",
+      "content": "IsOutOfTrackingRange()"
+    },
+    {
+      "id": "n6",
+      "content": "ReturnToHome()"
+    },
+    {
+      "id": "n7",
+      "content": "HealToFull()"
+    },
+    {
+      "id": "n8",
+      "content": "PatrolToNextPoint()"
+    },
+    {
+      "id": "n9",
+      "content": "MoveToPlayer()"
+    },
+    {
+      "id": "n10",
+      "content": "Continue"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "source": "n1",
+      "target": "n2",
+      "content": ""
+    },
+    {
+      "id": "e1",
+      "source": "n2",
+      "target": "n3",
+      "content": "true"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n8",
+      "content": "false"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4",
+      "content": "true"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n9",
+      "content": "false"
+    },
+    {
+      "id": "e5",
+      "source": "n4",
+      "target": "n5",
+      "content": ""
+    },
+    {
+      "id": "e6",
+      "source": "n5",
+      "target": "n6",
+      "content": "true"
+    },
+    {
+      "id": "e7",
+      "source": "n5",
+      "target": "n10",
+      "content": "false"
+    },
+    {
+      "id": "e8",
+      "source": "n6",
+      "target": "n7",
+      "content": ""
+    },
+    {
+      "id": "e9",
+      "source": "n7",
+      "target": "n10",
+      "content": ""
+    },
+    {
+      "id": "e10",
+      "source": "n8",
+      "target": "n0",
+      "content": ""
+    },
+    {
+      "id": "e11",
+      "source": "n9",
+      "target": "n3",
+      "content": ""
+    },
+    {
+      "id": "e12",
+      "source": "n10",
+      "target": "n0",
+      "content": ""
+    },
+    {
+      "id": "e13",
+      "source": "n10",
+      "target": "n3",
+      "content": "true"
+    },
+    {
+      "id": "e14",
+      "source": "n10",
+      "target": "n4",
+      "content": "false"
+    }
+  ]
+}

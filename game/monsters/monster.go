@@ -1,6 +1,7 @@
 package monster
 
 import (
+	"github.com/pzqf/zEngine/zScript"
 	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object"
 	"github.com/pzqf/zGameServer/game/object/component"
@@ -9,8 +10,9 @@ import (
 // Monster 怪物类
 type Monster struct {
 	*object.LivingObject
-	aiBehavior *AIBehavior
-	dropConfig *DropConfig
+	aiBehavior   *AIBehavior
+	dropConfig   *DropConfig
+	scriptHolder *zScript.ScriptHolder
 }
 
 // AIBehavior 怪物AI行为
@@ -113,6 +115,11 @@ func (ai *AIBehavior) SetRunawayRange(range_ float32) {
 	ai.runawayRange = range_
 }
 
+// GetAttackRange 获取攻击范围
+func (ai *AIBehavior) GetAttackRange() float32 {
+	return 2.5
+}
+
 // DropConfig 掉落配置
 type DropConfig struct {
 	*component.BaseComponent
@@ -198,11 +205,15 @@ func NewMonster(id uint64, name string) *Monster {
 		gold:          50,
 	}
 
+	// 创建脚本持有者
+	scriptHolder := &zScript.ScriptHolder{}
+
 	// 创建怪物对象
 	monster := &Monster{
 		LivingObject: livingObj,
 		aiBehavior:   aiBehavior,
 		dropConfig:   dropConfig,
+		scriptHolder: scriptHolder,
 	}
 
 	// 添加组件
@@ -225,4 +236,40 @@ func (m *Monster) GetAIBehavior() *AIBehavior {
 // GetDropConfig 获取掉落配置
 func (m *Monster) GetDropConfig() *DropConfig {
 	return m.dropConfig
+}
+
+// GetScriptHolder 获取脚本持有者
+func (m *Monster) GetScriptHolder() *zScript.ScriptHolder {
+	return m.scriptHolder
+}
+
+// SetScriptHolder 设置脚本持有者
+func (m *Monster) SetScriptHolder(holder *zScript.ScriptHolder) {
+	m.scriptHolder = holder
+}
+
+// BindScript 绑定脚本
+func (m *Monster) BindScript(scriptFilename string) error {
+	err := m.scriptHolder.BindScript(scriptFilename)
+	if err != nil {
+		return err
+	}
+	m.scriptHolder.SetContext(m)
+	return nil
+}
+
+// UpdateAI 更新AI
+func (m *Monster) UpdateAI(deltaTime int) {
+	m.scriptHolder.Update(deltaTime)
+}
+
+// InitAI 初始化AI
+func (m *Monster) InitAI(scriptFilename string) error {
+	if scriptFilename != "" {
+		err := m.BindScript(scriptFilename)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

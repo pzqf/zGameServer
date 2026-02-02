@@ -1,9 +1,6 @@
 package player
 
 import (
-	"sync/atomic"
-	"time"
-
 	"github.com/pzqf/zEngine/zEvent"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
@@ -26,21 +23,8 @@ const (
 // Player 玩家对象类 (继承 LivingObject)
 type Player struct {
 	*object.LivingObject
-	playerId     int64
-	name         string
-	session      *zNet.TcpServerSession
-	status       atomic.Int32
-	inventory    *Inventory
-	equipment    *Equipment
-	mailbox      *Mailbox
-	taskManager  *TaskManager
-	skillManager *SkillManager
-	exp          atomic.Int64
-	gold         atomic.Int64
-	level        atomic.Int32
-	vipLevel     atomic.Int32
-	serverId     int
-	createTime   int64
+	playerId int64
+	session  *zNet.TcpServerSession
 }
 
 // NewPlayer 创建新玩家对象
@@ -51,44 +35,38 @@ func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession) *Pla
 	player := &Player{
 		LivingObject: livingObj,
 		playerId:     playerId,
-		name:         name,
 		session:      session,
-		serverId:     1,
-		createTime:   time.Now().UnixMilli(),
 	}
 
-	player.status.Store(int32(PlayerStatusOnline))
-	player.exp.Store(0)
-	player.gold.Store(1000)
-	player.level.Store(1)
-	player.vipLevel.Store(0)
-
-	player.initComponents()
+	player.initComponents(name)
 
 	return player
 }
 
 // initComponents 初始化玩家组件
-func (p *Player) initComponents() {
-	// 背包组件
-	p.inventory = NewInventory(p.playerId)
-	p.AddComponent(p.inventory)
+func (p *Player) initComponents(name string) {
+	baseInfo := NewBaseInfo(name, p.session)
+	p.AddComponent(baseInfo)
 
-	// 装备组件
-	p.equipment = NewEquipment(p.playerId)
-	p.AddComponent(p.equipment)
+	inventory := NewInventory(p.GetPlayerId())
+	p.AddComponent(inventory)
 
-	// 邮箱组件
-	p.mailbox = NewMailbox(p.playerId)
-	p.AddComponent(p.mailbox)
+	equipment := NewEquipment(p.GetPlayerId())
+	p.AddComponent(equipment)
 
-	// 任务组件
-	p.taskManager = NewTaskManager(p.playerId)
-	p.AddComponent(p.taskManager)
+	mailbox := NewMailbox(p.GetPlayerId())
+	p.AddComponent(mailbox)
 
-	// 技能组件
-	p.skillManager = NewSkillManager(p.playerId)
-	p.AddComponent(p.skillManager)
+	taskManager := NewTaskManager(p.GetPlayerId())
+	p.AddComponent(taskManager)
+
+	skillManager := NewSkillManager(p.GetPlayerId())
+	p.AddComponent(skillManager)
+}
+
+// Update 更新玩家状态
+func (p *Player) Update(deltaTime float64) {
+	p.LivingObject.Update(deltaTime)
 }
 
 // GetPlayerId 获取玩家ID
@@ -96,14 +74,26 @@ func (p *Player) GetPlayerId() int64 {
 	return p.playerId
 }
 
+// SetPlayerId 设置玩家ID
+func (p *Player) SetPlayerId(playerId int64) {
+	p.playerId = playerId
+}
+
 // GetName 获取玩家名称
 func (p *Player) GetName() string {
-	return p.name
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return ""
+	}
+	return baseInfo.(*BaseInfo).GetName()
 }
 
 // SetName 设置玩家名称
 func (p *Player) SetName(name string) {
-	p.name = name
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetName(name)
+	}
 }
 
 // GetSession 获取会话
@@ -114,15 +104,27 @@ func (p *Player) GetSession() *zNet.TcpServerSession {
 // SetSession 设置会话
 func (p *Player) SetSession(session *zNet.TcpServerSession) {
 	p.session = session
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetSession(session)
+	}
 }
 
 // GetStatus 获取玩家状态
 func (p *Player) GetStatus() PlayerStatus {
-	return PlayerStatus(p.status.Load())
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return PlayerStatusOffline
+	}
+	return baseInfo.(*BaseInfo).GetStatus()
 }
 
+// SetStatus 设置玩家状态
 func (p *Player) SetStatus(status PlayerStatus) {
-	p.status.Store(int32(status))
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetStatus(status)
+	}
 }
 
 // IsOnline 检查玩家是否在线
@@ -142,177 +144,245 @@ func (p *Player) IsAFK() bool {
 
 // GetLevel 获取玩家等级
 func (p *Player) GetLevel() int {
-	return int(p.level.Load())
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return 1
+	}
+	return baseInfo.(*BaseInfo).GetLevel()
 }
 
 // SetLevel 设置玩家等级
 func (p *Player) SetLevel(level int) {
-	p.level.Store(int32(level))
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetLevel(level)
+	}
 }
 
 // GetExp 获取玩家经验
 func (p *Player) GetExp() int64 {
-	return p.exp.Load()
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return 0
+	}
+	return baseInfo.(*BaseInfo).GetExp()
 }
 
 // SetExp 设置玩家经验
 func (p *Player) SetExp(exp int64) {
-	p.exp.Store(exp)
-	p.checkLevelUp()
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetExp(exp)
+		p.checkLevelUp()
+	}
 }
 
 // AddExp 增加玩家经验
 func (p *Player) AddExp(exp int64) {
-	currentExp := p.exp.Load()
-	newExp := currentExp + exp
-	p.exp.Store(newExp)
-	p.checkLevelUp()
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).AddExp(exp)
+		p.checkLevelUp()
 
-	zLog.Info("Player gained exp",
-		zap.Int64("playerId", p.playerId),
-		zap.Int64("exp", exp),
-		zap.Int64("totalExp", newExp))
-
-	p.PublishEvent(zEvent.NewEvent(1, p, map[string]interface{}{
-		"playerId": p.playerId,
-		"exp":      exp,
-	}))
+		p.PublishEvent(zEvent.NewEvent(1, p, map[string]interface{}{
+			"playerId": p.GetPlayerId(),
+			"exp":      exp,
+		}))
+	}
 }
 
 // GetGold 获取玩家金币
 func (p *Player) GetGold() int64 {
-	return p.gold.Load()
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return 0
+	}
+	return baseInfo.(*BaseInfo).GetGold()
 }
 
 // SetGold 设置玩家金币
 func (p *Player) SetGold(gold int64) {
-	if gold < 0 {
-		gold = 0
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetGold(gold)
 	}
-	p.gold.Store(gold)
 }
 
 // AddGold 增加玩家金币
 func (p *Player) AddGold(gold int64) {
-	currentGold := p.gold.Load()
-	newGold := currentGold + gold
-	p.gold.Store(newGold)
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).AddGold(gold)
 
-	zLog.Info("Player gained gold",
-		zap.Int64("playerId", p.playerId),
-		zap.Int64("gold", gold),
-		zap.Int64("totalGold", newGold))
-
-	p.PublishEvent(zEvent.NewEvent(2, p, map[string]interface{}{
-		"playerId": p.playerId,
-		"oldGold":  currentGold,
-		"newGold":  newGold,
-	}))
+		p.PublishEvent(zEvent.NewEvent(2, p, map[string]interface{}{
+			"playerId": p.GetPlayerId(),
+			"oldGold":  baseInfo.(*BaseInfo).GetGold() - gold,
+			"newGold":  baseInfo.(*BaseInfo).GetGold(),
+		}))
+	}
 }
 
 // SubGold 减少玩家金币
 func (p *Player) SubGold(gold int64) bool {
-	currentGold := p.gold.Load()
-	if currentGold < gold {
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
 		return false
 	}
+	return baseInfo.(*BaseInfo).SubGold(gold)
+}
 
-	newGold := currentGold - gold
-	p.gold.Store(newGold)
+// GetVIPLevel 获取VIP等级
+func (p *Player) GetVIPLevel() int {
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return 0
+	}
+	return baseInfo.(*BaseInfo).GetVIPLevel()
+}
 
-	return true
+// SetVIPLevel 设置VIP等级
+func (p *Player) SetVIPLevel(vipLevel int) {
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetVIPLevel(vipLevel)
+	}
 }
 
 // GetInventory 获取背包
 func (p *Player) GetInventory() *Inventory {
-	return p.inventory
+	inventory := p.GetComponent("inventory")
+	if inventory == nil {
+		return nil
+	}
+	return inventory.(*Inventory)
 }
 
 // GetEquipment 获取装备
 func (p *Player) GetEquipment() *Equipment {
-	return p.equipment
+	equipment := p.GetComponent("equipment")
+	if equipment == nil {
+		return nil
+	}
+	return equipment.(*Equipment)
 }
 
 // GetMailbox 获取邮箱
 func (p *Player) GetMailbox() *Mailbox {
-	return p.mailbox
+	mailbox := p.GetComponent("mailbox")
+	if mailbox == nil {
+		return nil
+	}
+	return mailbox.(*Mailbox)
 }
 
 // GetTaskManager 获取任务管理器
 func (p *Player) GetTaskManager() *TaskManager {
-	return p.taskManager
+	taskManager := p.GetComponent("tasks")
+	if taskManager == nil {
+		return nil
+	}
+	return taskManager.(*TaskManager)
 }
 
 // GetSkillManager 获取技能管理器
 func (p *Player) GetSkillManager() *SkillManager {
-	return p.skillManager
+	skillManager := p.GetComponent("skills")
+	if skillManager == nil {
+		return nil
+	}
+	return skillManager.(*SkillManager)
+}
+
+// GetBaseInfo 获取基础信息组件
+func (p *Player) GetBaseInfo() *BaseInfo {
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return nil
+	}
+	return baseInfo.(*BaseInfo)
+}
+
+// GetCreateTime 获取创建时间
+func (p *Player) GetCreateTime() int64 {
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
+		return 0
+	}
+	return baseInfo.(*BaseInfo).GetCreateTime()
 }
 
 // SendPacket 发送数据包
 func (p *Player) SendPacket(packetId int32, data []byte) error {
-	if p.session == nil {
-		zLog.Warn("Player session is nil", zap.Int64("playerId", p.playerId))
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil {
 		return nil
 	}
-	return p.session.Send(packetId, data)
+	return baseInfo.(*BaseInfo).SendPacket(packetId, data)
 }
 
 // SendText 发送文本消息
 func (p *Player) SendText(message string) error {
-	return p.SendPacket(1001, []byte(message))
+	return p.SendText(message)
 }
 
 // Login 玩家登录
 func (p *Player) Login() {
-	if p.session == nil {
-		zLog.Error("Login failed: no session", zap.Int64("playerId", p.playerId))
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo == nil || baseInfo.(*BaseInfo).GetSession() == nil {
+		zLog.Error("Login failed: no session", zap.Int64("playerId", p.GetPlayerId()))
 		return
 	}
 
-	p.SetStatus(PlayerStatusOnline)
+	baseInfo.(*BaseInfo).SetStatus(PlayerStatusOnline)
 	p.SetActive(true)
 
 	zLog.Info("Player logged in",
-		zap.Int64("playerId", p.playerId),
-		zap.String("name", p.name))
+		zap.Int64("playerId", p.GetPlayerId()),
+		zap.String("name", baseInfo.(*BaseInfo).GetName()))
 
 	p.PublishEvent(zEvent.NewEvent(0, p, map[string]interface{}{
-		"playerId": p.playerId,
-		"name":     p.name,
+		"playerId": p.GetPlayerId(),
+		"name":     baseInfo.(*BaseInfo).GetName(),
 		"level":    p.GetLevel(),
 	}))
 }
 
 // Logout 玩家登出
 func (p *Player) Logout() {
-	p.SetStatus(PlayerStatusOffline)
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetStatus(PlayerStatusOffline)
 
-	if p.session != nil {
-		p.session.Close()
-		p.session = nil
+		if session := baseInfo.(*BaseInfo).GetSession(); session != nil {
+			session.Close()
+			baseInfo.(*BaseInfo).SetSession(nil)
+		}
+
+		zLog.Info("Player logged out", zap.Int64("playerId", p.GetPlayerId()), zap.String("name", baseInfo.(*BaseInfo).GetName()))
+
+		p.PublishEvent(zEvent.NewEvent(3, p, map[string]interface{}{
+			"playerId": p.GetPlayerId(),
+		}))
 	}
-
-	zLog.Info("Player logged out", zap.Int64("playerId", p.playerId), zap.String("name", p.name))
-
-	p.PublishEvent(zEvent.NewEvent(3, p, map[string]interface{}{
-		"playerId": p.playerId,
-	}))
 }
 
 // OnDisconnect 玩家断开连接
 func (p *Player) OnDisconnect() {
-	p.SetStatus(PlayerStatusOffline)
+	baseInfo := p.GetComponent("baseinfo")
+	if baseInfo != nil {
+		baseInfo.(*BaseInfo).SetStatus(PlayerStatusOffline)
 
-	if p.session != nil {
-		p.session.Close()
-		p.session = nil
+		if session := baseInfo.(*BaseInfo).GetSession(); session != nil {
+			session.Close()
+			baseInfo.(*BaseInfo).SetSession(nil)
+		}
+
+		zLog.Info("Player disconnected", zap.Int64("playerId", p.GetPlayerId()))
+
+		p.PublishEvent(zEvent.NewEvent(4, p, map[string]interface{}{
+			"playerId": p.GetPlayerId(),
+		}))
 	}
-
-	zLog.Info("Player disconnected", zap.Int64("playerId", p.playerId))
-
-	p.PublishEvent(zEvent.NewEvent(4, p, map[string]interface{}{
-		"playerId": p.playerId,
-	}))
 }
 
 // Attack 玩家攻击目标
@@ -327,7 +397,7 @@ func (p *Player) Attack(target common.IGameObject) {
 	}
 
 	p.PublishEvent(zEvent.NewEvent(5, p, map[string]interface{}{
-		"playerId": p.playerId,
+		"playerId": p.GetPlayerId(),
 		"targetId": target.GetID(),
 	}))
 }
@@ -339,13 +409,11 @@ func (p *Player) MoveTo(targetPos common.Vector3) {
 	}
 
 	p.SetStatus(PlayerStatusBusy)
-
 	p.SetPosition(targetPos)
-
 	p.SetStatus(PlayerStatusOnline)
 
 	p.PublishEvent(zEvent.NewEvent(6, p, map[string]interface{}{
-		"playerId": p.playerId,
+		"playerId": p.GetPlayerId(),
 		"position": targetPos,
 	}))
 }
@@ -365,7 +433,7 @@ func (p *Player) TakeDamage(damage float32, attacker common.IGameObject) {
 	}
 
 	p.PublishEvent(zEvent.NewEvent(7, p, map[string]interface{}{
-		"playerId": p.playerId,
+		"playerId": p.GetPlayerId(),
 		"damage":   damage,
 		"health":   p.GetHealth(),
 	}))
@@ -384,7 +452,7 @@ func (p *Player) OnHeal(healer common.IGameObject, amount float32) {
 
 	if healer != nil {
 		p.PublishEvent(zEvent.NewEvent(8, p, map[string]interface{}{
-			"playerId": p.playerId,
+			"playerId": p.GetPlayerId(),
 			"amount":   amount,
 		}))
 	}
@@ -395,10 +463,10 @@ func (p *Player) OnDie() {
 	p.SetStatus(PlayerStatusOffline)
 	p.SetActive(false)
 
-	zLog.Info("Player died", zap.Int64("playerId", p.playerId))
+	zLog.Info("Player died", zap.Int64("playerId", p.GetPlayerId()))
 
 	p.PublishEvent(zEvent.NewEvent(9, p, map[string]interface{}{
-		"playerId": p.playerId,
+		"playerId": p.GetPlayerId(),
 	}))
 }
 
@@ -410,49 +478,59 @@ func (p *Player) checkLevelUp() {
 	requiredExp := int64(level * 1000)
 
 	if exp >= requiredExp {
-		p.level.Add(1)
-		newLevel := p.GetLevel()
+		baseInfo := p.GetComponent("baseinfo")
+		if baseInfo != nil {
+			currentLevel := baseInfo.(*BaseInfo).level.Load()
+			baseInfo.(*BaseInfo).level.Store(currentLevel + 1)
+			newLevel := p.GetLevel()
 
-		currentExp := p.exp.Load()
-		newExp := currentExp - requiredExp
-		p.exp.Store(newExp)
+			currentExp := baseInfo.(*BaseInfo).exp.Load()
+			newExp := currentExp - requiredExp
+			baseInfo.(*BaseInfo).exp.Store(newExp)
 
-		zLog.Info("Player leveled up",
-			zap.Int64("playerId", p.playerId),
-			zap.Int("oldLevel", level),
-			zap.Int("newLevel", newLevel))
+			zLog.Info("Player leveled up",
+				zap.Int64("playerId", p.GetPlayerId()),
+				zap.Int("oldLevel", level),
+				zap.Int("newLevel", newLevel))
 
-		p.PublishEvent(zEvent.NewEvent(10, p, map[string]interface{}{
-			"playerId": p.playerId,
-			"oldLevel": level,
-			"newLevel": newLevel,
-		}))
+			p.PublishEvent(zEvent.NewEvent(10, p, map[string]interface{}{
+				"playerId": p.GetPlayerId(),
+				"oldLevel": level,
+				"newLevel": newLevel,
+			}))
 
-		p.onLevelUp(newLevel)
+			p.onLevelUp(newLevel)
+		}
 	}
 }
 
 // onLevelUp 升级处理
 func (p *Player) onLevelUp(newLevel int) {
-	// 增加属性
 	currentAttack := p.GetProperty("physical_attack")
 	p.SetProperty("physical_attack", currentAttack+2)
 	currentDefense := p.GetProperty("physical_defense")
 	p.SetProperty("physical_defense", currentDefense+1)
 
-	// 恢复生命值和魔法值
 	p.SetHealth(p.GetMaxHealth())
 	p.SetMana(p.GetMaxMana())
 }
 
 // UseSkill 使用技能
 func (p *Player) UseSkill(skillId int) error {
-	return p.skillManager.UseSkill(p.playerId, int64(skillId))
+	skillManager := p.GetComponent("skills")
+	if skillManager == nil {
+		return nil
+	}
+	return skillManager.(*SkillManager).UseSkill(p.GetPlayerId(), int64(skillId))
 }
 
 // LearnSkill 学习技能
 func (p *Player) LearnSkill(skillId int) error {
-	return p.skillManager.LearnSkill(int64(skillId))
+	skillManager := p.GetComponent("skills")
+	if skillManager == nil {
+		return nil
+	}
+	return skillManager.(*SkillManager).LearnSkill(int64(skillId))
 }
 
 // GetSkillPoints 获取技能点数
