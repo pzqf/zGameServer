@@ -23,12 +23,12 @@ const (
 // Player 玩家对象类 (继承 LivingObject)
 type Player struct {
 	*object.LivingObject
-	playerId int64
+	playerId common.PlayerIdType
 	session  *zNet.TcpServerSession
 }
 
 // NewPlayer 创建新玩家对象
-func NewPlayer(playerId int64, name string, session *zNet.TcpServerSession) *Player {
+func NewPlayer(playerId common.PlayerIdType, name string, session *zNet.TcpServerSession) *Player {
 	livingObj := object.NewLivingObject(uint64(playerId), name)
 	livingObj.SetType(common.GameObjectTypePlayer)
 
@@ -70,12 +70,12 @@ func (p *Player) Update(deltaTime float64) {
 }
 
 // GetPlayerId 获取玩家ID
-func (p *Player) GetPlayerId() int64 {
+func (p *Player) GetPlayerId() common.PlayerIdType {
 	return p.playerId
 }
 
 // SetPlayerId 设置玩家ID
-func (p *Player) SetPlayerId(playerId int64) {
+func (p *Player) SetPlayerId(playerId common.PlayerIdType) {
 	p.playerId = playerId
 }
 
@@ -329,7 +329,7 @@ func (p *Player) SendText(message string) error {
 func (p *Player) Login() {
 	baseInfo := p.GetComponent("baseinfo")
 	if baseInfo == nil || baseInfo.(*BaseInfo).GetSession() == nil {
-		zLog.Error("Login failed: no session", zap.Int64("playerId", p.GetPlayerId()))
+		zLog.Error("Login failed: no session", zap.Int64("playerId", int64(p.GetPlayerId())))
 		return
 	}
 
@@ -337,7 +337,7 @@ func (p *Player) Login() {
 	p.SetActive(true)
 
 	zLog.Info("Player logged in",
-		zap.Int64("playerId", p.GetPlayerId()),
+		zap.Int64("playerId", int64(p.GetPlayerId())),
 		zap.String("name", baseInfo.(*BaseInfo).GetName()))
 
 	p.PublishEvent(zEvent.NewEvent(0, p, map[string]interface{}{
@@ -358,7 +358,7 @@ func (p *Player) Logout() {
 			baseInfo.(*BaseInfo).SetSession(nil)
 		}
 
-		zLog.Info("Player logged out", zap.Int64("playerId", p.GetPlayerId()), zap.String("name", baseInfo.(*BaseInfo).GetName()))
+		zLog.Info("Player logged out", zap.Int64("playerId", int64(p.GetPlayerId())), zap.String("name", baseInfo.(*BaseInfo).GetName()))
 
 		p.PublishEvent(zEvent.NewEvent(3, p, map[string]interface{}{
 			"playerId": p.GetPlayerId(),
@@ -377,7 +377,7 @@ func (p *Player) OnDisconnect() {
 			baseInfo.(*BaseInfo).SetSession(nil)
 		}
 
-		zLog.Info("Player disconnected", zap.Int64("playerId", p.GetPlayerId()))
+		zLog.Info("Player disconnected", zap.Int64("playerId", int64(p.GetPlayerId())))
 
 		p.PublishEvent(zEvent.NewEvent(4, p, map[string]interface{}{
 			"playerId": p.GetPlayerId(),
@@ -463,7 +463,7 @@ func (p *Player) OnDie() {
 	p.SetStatus(PlayerStatusOffline)
 	p.SetActive(false)
 
-	zLog.Info("Player died", zap.Int64("playerId", p.GetPlayerId()))
+	zLog.Info("Player died", zap.Int64("playerId", int64(p.GetPlayerId())))
 
 	p.PublishEvent(zEvent.NewEvent(9, p, map[string]interface{}{
 		"playerId": p.GetPlayerId(),
@@ -489,7 +489,7 @@ func (p *Player) checkLevelUp() {
 			baseInfo.(*BaseInfo).exp.Store(newExp)
 
 			zLog.Info("Player leveled up",
-				zap.Int64("playerId", p.GetPlayerId()),
+				zap.Int64("playerId", int64(p.GetPlayerId())),
 				zap.Int("oldLevel", level),
 				zap.Int("newLevel", newLevel))
 
@@ -521,7 +521,7 @@ func (p *Player) UseSkill(skillId int) error {
 	if skillManager == nil {
 		return nil
 	}
-	return skillManager.(*SkillManager).UseSkill(p.GetPlayerId(), int64(skillId))
+	return skillManager.(*SkillManager).UseSkill(int64(p.GetPlayerId()), int64(skillId))
 }
 
 // LearnSkill 学习技能

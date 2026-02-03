@@ -68,8 +68,8 @@ type Guild struct {
 	LeaderId         int64
 	MemberCount      int
 	MaxMembers       int
-	Members          *zMap.Map // key: int64(playerId), value: *GuildMember
-	Applies          *zMap.Map // key: int64(applyId), value: *GuildApply
+	Members          *zMap.ShardedMap // key: int64(playerId), value: *GuildMember
+	Applies          *zMap.ShardedMap // key: int64(applyId), value: *GuildApply
 	CreateTime       int64
 	Notice           string
 	WarScore         int64         // 公会战积分
@@ -87,7 +87,7 @@ var (
 // AddMember 添加成员到公会
 func (g *Guild) AddMember(playerId int64, playerName string, position int) error {
 	// 检查玩家是否已在公会中
-	if _, exists := g.Members.Get(playerId); exists {
+	if _, exists := g.Members.Load(playerId); exists {
 		return nil // 玩家已在公会中
 	}
 
@@ -120,7 +120,7 @@ func (g *Guild) AddMember(playerId int64, playerName string, position int) error
 // RemoveMember 从公会移除成员
 func (g *Guild) RemoveMember(playerId int64) error {
 	// 检查玩家是否在公会中
-	memberInterface, exists := g.Members.Get(playerId)
+	memberInterface, exists := g.Members.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
@@ -190,7 +190,7 @@ func (g *Guild) transferGuildLeader(oldLeaderId int64) {
 		g.LeaderId = newLeaderId
 
 		// 更新旧会长的职位为普通成员
-		if memberInterface, exists := g.Members.Get(oldLeaderId); exists {
+		if memberInterface, exists := g.Members.Load(oldLeaderId); exists {
 			oldLeader := memberInterface.(*GuildMember)
 			oldLeader.Position = GuildPositionMember
 			g.Members.Store(oldLeaderId, oldLeader)
@@ -203,7 +203,7 @@ func (g *Guild) transferGuildLeader(oldLeaderId int64) {
 // SetMemberPosition 设置公会成员职位
 func (g *Guild) SetMemberPosition(playerId int64, newPosition int) error {
 	// 检查玩家是否在公会中
-	memberInterface, exists := g.Members.Get(playerId)
+	memberInterface, exists := g.Members.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
@@ -217,7 +217,7 @@ func (g *Guild) SetMemberPosition(playerId int64, newPosition int) error {
 		}
 
 		// 获取旧会长
-		oldLeaderInterface, exists := g.Members.Get(g.LeaderId)
+		oldLeaderInterface, exists := g.Members.Load(g.LeaderId)
 		if exists {
 			oldLeader := oldLeaderInterface.(*GuildMember)
 			// 将旧会长职位改为普通成员
@@ -243,7 +243,7 @@ func (g *Guild) UpdateNotice(notice string) {
 
 // GetMember 获取公会成员信息
 func (g *Guild) GetMember(playerId int64) (*GuildMember, bool) {
-	member, exists := g.Members.Get(playerId)
+	member, exists := g.Members.Load(playerId)
 	if !exists {
 		return nil, false
 	}
@@ -263,7 +263,7 @@ func (g *Guild) GetMembers() []*GuildMember {
 // UpdateMemberContribution 更新公会成员贡献
 func (g *Guild) UpdateMemberContribution(playerId int64, amount int64) error {
 	// 检查玩家是否在公会中
-	memberInterface, exists := g.Members.Get(playerId)
+	memberInterface, exists := g.Members.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
@@ -282,7 +282,7 @@ func (g *Guild) UpdateMemberContribution(playerId int64, amount int64) error {
 // GetMemberContribution 获取公会成员贡献
 func (g *Guild) GetMemberContribution(playerId int64) (int64, error) {
 	// 检查玩家是否在公会中
-	memberInterface, exists := g.Members.Get(playerId)
+	memberInterface, exists := g.Members.Load(playerId)
 	if !exists {
 		return 0, ErrPlayerNotInGuild
 	}
@@ -312,7 +312,7 @@ func (g *Guild) Upgrade() error {
 // CheckPermission 检查玩家是否有指定权限
 func (g *Guild) CheckPermission(playerId int64, permission int64) error {
 	// 检查玩家是否在公会中
-	memberInterface, exists := g.Members.Get(playerId)
+	memberInterface, exists := g.Members.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
@@ -334,7 +334,7 @@ func (g *Guild) AddApply(apply *GuildApply) {
 // ProcessApply 处理公会申请
 func (g *Guild) ProcessApply(applyId int64, accept bool) error {
 	// 获取申请
-	applyInterface, exists := g.Applies.Get(applyId)
+	applyInterface, exists := g.Applies.Load(applyId)
 	if !exists {
 		return errors.New("application not exists")
 	}
@@ -372,7 +372,7 @@ func (g *Guild) GetApplies() []*GuildApply {
 // UpdateMemberOnlineStatus 更新公会成员在线状态
 func (g *Guild) UpdateMemberOnlineStatus(playerId int64, online bool) error {
 	// 检查玩家是否在公会中
-	memberInterface, exists := g.Members.Get(playerId)
+	memberInterface, exists := g.Members.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}

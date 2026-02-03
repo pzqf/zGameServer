@@ -18,10 +18,10 @@ import (
 
 type MapService struct {
 	zService.BaseService
-	maps        *zMap.Map // 存储所有地图实例，key: int64(mapId), value: *Map
-	objectMap   *zMap.Map // 存储对象到地图的映射，key: int64(objectId), value: int64(mapId)
-	gameObjects *zMap.Map // 存储所有游戏对象，key: int64(objectId), value: common.IGameObject
-	maxMaps     int       // 最大地图数量限制
+	maps        *zMap.TypedShardedMap[common.MapIdType, *Map]                  // 存储所有地图实例，key: MapIdType, value: *Map
+	objectMap   *zMap.TypedShardedMap[common.ObjectIdType, common.MapIdType]   // 存储对象到地图的映射，key: ObjectIdType, value: MapIdType
+	gameObjects *zMap.TypedShardedMap[common.ObjectIdType, common.IGameObject] // 存储所有游戏对象，key: ObjectIdType, value: common.IGameObject
+	maxMaps     int                                                            // 最大地图数量限制
 }
 
 // NewMapService 创建地图服务实例
@@ -29,9 +29,9 @@ type MapService struct {
 func NewMapService() *MapService {
 	ms := &MapService{
 		BaseService: *zService.NewBaseService(common.ServiceIdMap),
-		maps:        zMap.NewMap(),
-		objectMap:   zMap.NewMap(),
-		gameObjects: zMap.NewMap(),
+		maps:        zMap.NewTypedShardedMap32[common.MapIdType, *Map](),
+		objectMap:   zMap.NewTypedShardedMap32[common.ObjectIdType, common.MapIdType](),
+		gameObjects: zMap.NewTypedShardedMap32[common.ObjectIdType, common.IGameObject](),
 		maxMaps:     100,
 	}
 	return ms
@@ -90,7 +90,7 @@ func (ms *MapService) LoadMap(filePath string) error {
 
 	// 存储地图
 	mapId := mapObj.GetID()
-	ms.maps.Store(int64(mapId), mapObj)
+	ms.maps.Store(common.MapIdType(mapId), mapObj)
 
 	zLog.Info("Map loaded successfully", zap.Any("mapId", mapId), zap.String("mapName", mapObj.GetName()), zap.String("file_path", filePath))
 	return nil
@@ -138,8 +138,8 @@ func (ms *MapService) mapSyncLoop() {
 // 遍历所有地图，同步地图对象的位置和状态
 func (ms *MapService) syncMaps() {
 	// 遍历所有地图
-	ms.maps.Range(func(key, value interface{}) bool {
-		mapObj := value.(*Map)
+	ms.maps.Range(func(key common.MapIdType, value *Map) bool {
+		mapObj := value
 		// 同步地图对象的位置和状态
 		// 这里可以实现地图对象的同步逻辑
 		// 由于Map类型没有SyncObjects方法，我们可以简单地打印日志或者实现自己的同步逻辑
@@ -151,30 +151,30 @@ func (ms *MapService) syncMaps() {
 // AddGameObject 添加游戏对象到地图服务
 // obj: 游戏对象
 // mapId: 地图ID
-func (ms *MapService) AddGameObject(obj common.IGameObject, mapId int64) {
-	objectId := int64(obj.GetID())
+func (ms *MapService) AddGameObject(obj common.IGameObject, mapId common.MapIdType) {
+	objectId := common.ObjectIdType(obj.GetID())
 	ms.gameObjects.Store(objectId, obj)
 	ms.objectMap.Store(objectId, mapId)
 	zLog.Debug("Added game object",
-		zap.Int64("objectId", objectId),
+		zap.Int64("objectId", int64(objectId)),
 		zap.Int("objectType", obj.GetType()),
-		zap.Int64("mapId", mapId))
+		zap.Int64("mapId", int64(mapId)))
 }
 
 // RemoveGameObject 从地图服务中移除游戏对象
 // objectId: 对象ID
-func (ms *MapService) RemoveGameObject(objectId int64) {
+func (ms *MapService) RemoveGameObject(objectId common.ObjectIdType) {
 	ms.gameObjects.Delete(objectId)
 	ms.objectMap.Delete(objectId)
-	zLog.Debug("Removed game object", zap.Int64("objectId", objectId))
+	zLog.Debug("Removed game object", zap.Int64("objectId", int64(objectId)))
 }
 
 // GetGameObject 根据对象ID获取游戏对象
 // objectId: 对象ID
 // 返回游戏对象，如果不存在则返回nil
-func (ms *MapService) GetGameObject(objectId int64) common.IGameObject {
-	if obj, exists := ms.gameObjects.Get(objectId); exists {
-		return obj.(common.IGameObject)
+func (ms *MapService) GetGameObject(objectId common.ObjectIdType) common.IGameObject {
+	if obj, exists := ms.gameObjects.Load(objectId); exists {
+		return obj
 	}
 	return nil
 }
@@ -184,8 +184,8 @@ func (ms *MapService) GetGameObject(objectId int64) common.IGameObject {
 // 返回指定类型的游戏对象列表
 func (ms *MapService) GetGameObjectsByType(objectType int) []common.IGameObject {
 	var objects []common.IGameObject
-	ms.gameObjects.Range(func(key, value interface{}) bool {
-		obj := value.(common.IGameObject)
+	ms.gameObjects.Range(func(key common.ObjectIdType, value common.IGameObject) bool {
+		obj := value
 		if obj.GetType() == objectType {
 			objects = append(objects, obj)
 		}
@@ -197,13 +197,13 @@ func (ms *MapService) GetGameObjectsByType(objectType int) []common.IGameObject 
 // GetGameObjectsByMap 根据地图ID获取游戏对象列表
 // mapId: 地图ID
 // 返回指定地图的游戏对象列表
-func (ms *MapService) GetGameObjectsByMap(mapId int64) []common.IGameObject {
+func (ms *MapService) GetGameObjectsByMap(mapId common.MapIdType) []common.IGameObject {
 	var objects []common.IGameObject
-	ms.objectMap.Range(func(key, value interface{}) bool {
-		if value.(int64) == mapId {
-			objectId := key.(int64)
-			if obj, exists := ms.gameObjects.Get(objectId); exists {
-				objects = append(objects, obj.(common.IGameObject))
+	ms.objectMap.Range(func(key common.ObjectIdType, value common.MapIdType) bool {
+		if value == mapId {
+			objectId := key
+			if obj, exists := ms.gameObjects.Load(objectId); exists {
+				objects = append(objects, obj)
 			}
 		}
 		return true

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
@@ -68,12 +69,12 @@ type Skill struct {
 // SkillManager 技能管理系统
 type SkillManager struct {
 	*component.BaseComponent
-	playerId int64
+	playerId common.PlayerIdType
 	skills   *zMap.Map // key: int64(skillId), value: *Skill
 	maxCount int
 }
 
-func NewSkillManager(playerId int64) *SkillManager {
+func NewSkillManager(playerId common.PlayerIdType) *SkillManager {
 	return &SkillManager{
 		BaseComponent: component.NewBaseComponent("skills"),
 		playerId:      playerId,
@@ -84,7 +85,7 @@ func NewSkillManager(playerId int64) *SkillManager {
 
 func (sm *SkillManager) Init() error {
 	// 初始化技能管理系统
-	zLog.Debug("Initializing skill manager", zap.Int64("playerId", sm.playerId))
+	zLog.Debug("Initializing skill manager", zap.Int64("playerId", int64(sm.playerId)))
 	// 为新玩家初始化基础技能
 	sm.initBasicSkills()
 	return nil
@@ -93,7 +94,7 @@ func (sm *SkillManager) Init() error {
 // Destroy 销毁技能管理组件
 func (sm *SkillManager) Destroy() {
 	// 清理技能管理资源
-	zLog.Debug("Destroying skill manager", zap.Int64("playerId", sm.playerId))
+	zLog.Debug("Destroying skill manager", zap.Int64("playerId", int64(sm.playerId)))
 	sm.skills.Clear()
 }
 
@@ -155,7 +156,7 @@ func (sm *SkillManager) initBasicSkills() {
 // LearnSkill 学习技能
 func (sm *SkillManager) LearnSkill(skillId int64) error {
 	// 检查技能是否已存在
-	if _, exists := sm.skills.Get(skillId); exists {
+	if _, exists := sm.skills.Load(skillId); exists {
 		return nil // 技能已学习
 	}
 
@@ -170,7 +171,7 @@ func (sm *SkillManager) LearnSkill(skillId int64) error {
 	// 假设我们已经获取了技能信息
 	// sm.skills.Store(skillId, skill)
 
-	zLog.Info("Skill learned", zap.Int64("skillId", skillId), zap.Int64("playerId", sm.playerId))
+	zLog.Info("Skill learned", zap.Int64("skillId", skillId), zap.Int64("playerId", int64(sm.playerId)))
 	return nil
 }
 
@@ -199,7 +200,7 @@ func (sm *SkillManager) UpdateSkillEffects(skill *Skill) {
 // UpgradeSkill 升级技能
 func (sm *SkillManager) UpgradeSkill(skillId int64) error {
 	// 获取技能
-	skillInterface, exists := sm.skills.Get(skillId)
+	skillInterface, exists := sm.skills.Load(skillId)
 	if !exists {
 		return nil // 技能不存在
 	}
@@ -222,14 +223,15 @@ func (sm *SkillManager) UpgradeSkill(skillId int64) error {
 	sm.UpdateSkillEffects(skill)
 
 	sm.skills.Store(skillId, skill)
-	zLog.Info("Skill upgraded", zap.Int64("skillId", skillId), zap.Int("level", skill.level), zap.Int64("playerId", sm.playerId))
+	zLog.Info("Skill upgraded", zap.Int64("skillId", skillId),
+		zap.Int("level", skill.level), zap.Int64("playerId", int64(sm.playerId)))
 	return nil
 }
 
 // UseSkill 使用技能
 func (sm *SkillManager) UseSkill(skillId int64, targetId int64) error {
 	// 获取技能
-	skillInterface, exists := sm.skills.Get(skillId)
+	skillInterface, exists := sm.skills.Load(skillId)
 	if !exists {
 		return nil // 技能不存在
 	}
@@ -255,13 +257,14 @@ func (sm *SkillManager) UseSkill(skillId int64, targetId int64) error {
 	// TODO: 应用技能效果
 
 	sm.skills.Store(skillId, skill)
-	zLog.Info("Skill used", zap.Int64("skillId", skillId), zap.Int64("targetId", targetId), zap.Int64("playerId", sm.playerId))
+	zLog.Info("Skill used", zap.Int64("skillId", skillId), zap.Int64("targetId", targetId),
+		zap.Int64("playerId", int64(sm.playerId)))
 	return nil
 }
 
 // GetSkill 获取技能信息
 func (sm *SkillManager) GetSkill(skillId int64) (*Skill, bool) {
-	skill, exists := sm.skills.Get(skillId)
+	skill, exists := sm.skills.Load(skillId)
 	if !exists {
 		return nil, false
 	}

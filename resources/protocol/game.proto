@@ -25,9 +25,9 @@ enum PlayerMsgId {
   // 账号相关
   MSG_PLAYER_ACCOUNT_CREATE = 1001;
   MSG_PLAYER_ACCOUNT_LOGIN = 1002;
-  MSG_PLAYER_CHARACTER_CREATE = 1003;
-  MSG_PLAYER_CHARACTER_LOGIN = 1004;
-  MSG_PLAYER_CHARACTER_LOGOUT = 1005;
+  MSG_PLAYER_PLAYER_CREATE = 1003;
+  MSG_PLAYER_PLAYER_LOGIN = 1004;
+  MSG_PLAYER_PLAYER_LOGOUT = 1005;
   // 基础信息
   MSG_PLAYER_GET_INFO = 1006;
   MSG_PLAYER_UPDATE_INFO = 1007;
@@ -145,9 +145,9 @@ message AccountLoginRequest {
   string version = 5;
 }
 
-// 角色信息
-message CharacterInfo {
-  int64 character_id = 1;
+// 玩家信息
+message PlayerInfo {
+  int64 player_id = 1;
   string name = 2;
   int32 level = 3;
   int32 sex = 4;
@@ -158,30 +158,30 @@ message CharacterInfo {
 message AccountLoginResponse {
   bool success = 1;
   string error_msg = 2;
-  repeated CharacterInfo characters = 3;
+  repeated PlayerInfo players = 3;
 }
 
-// 角色创建请求
-message CharacterCreateRequest {
+// 玩家创建请求
+message PlayerCreateRequest {
   string name = 1;
   int32 sex = 2;
   int32 age = 3;
 }
 
-// 角色创建响应
-message CharacterCreateResponse {
+// 玩家创建响应
+message PlayerCreateResponse {
   bool success = 1;
   string error_msg = 2;
-  CharacterInfo character = 3;
+  PlayerInfo player = 3;
 }
 
-// 角色选择登录请求
-message CharacterLoginRequest {
-  int64 character_id = 1;
+// 玩家登录请求
+message PlayerLoginRequest {
+  int64 player_id = 1;
 }
 
-// 角色选择登录响应
-message CharacterLoginResponse {
+// 玩家登录响应
+message PlayerLoginResponse {
   bool success = 1;
   string error_msg = 2;
   int64 player_id = 3;
@@ -190,16 +190,7 @@ message CharacterLoginResponse {
   int64 gold = 6;
 }
 
-// 角色登出请求
-message CharacterLogoutRequest {
-  int64 character_id = 1;
-}
 
-// 角色登出响应
-message CharacterLogoutResponse {
-  bool success = 1;
-  string error_msg = 2;
-}
 
 // 玩家获取信息请求
 message PlayerGetInfoRequest {

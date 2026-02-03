@@ -5,6 +5,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/event"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
@@ -48,10 +49,10 @@ func NewItem(itemId int64, itemType int, itemName string, count int, maxStack in
 	return item
 }
 
-func NewInventory(playerId int64) *Inventory {
+func NewInventory(playerId common.PlayerIdType) *Inventory {
 	return &Inventory{
 		BaseComponent: component.NewBaseComponent("inventory"),
-		playerId:      playerId,
+		playerId:      int64(playerId),
 		items:         zMap.NewMap(),
 		size:          60, // 默认背包大小
 	}
@@ -90,7 +91,7 @@ func (inv *Inventory) AddItem(item *Item) (int, error) {
 
 		if stackableSlot != 0 && availableSpace > 0 {
 			// 堆叠物品
-			existingItemInterface, _ := inv.items.Get(stackableSlot)
+			existingItemInterface, _ := inv.items.Load(stackableSlot)
 			existingItem := existingItemInterface.(*Item)
 
 			if int(item.count.Load()) <= availableSpace {
@@ -123,7 +124,7 @@ func (inv *Inventory) AddItem(item *Item) (int, error) {
 
 	// 查找空槽位放置剩余物品
 	for slot := 1; slot <= inv.size; slot++ {
-		if _, exists := inv.items.Get(slot); !exists {
+		if _, exists := inv.items.Load(slot); !exists {
 			// 添加到空槽位
 			inv.items.Store(slot, item)
 			// 发布物品增加事件
@@ -143,7 +144,7 @@ func (inv *Inventory) AddItem(item *Item) (int, error) {
 
 // RemoveItem 从背包移除物品
 func (inv *Inventory) RemoveItem(slot int, count int) error {
-	item, exists := inv.items.Get(slot)
+	item, exists := inv.items.Load(slot)
 	if !exists {
 		return nil // 槽位为空
 	}
@@ -174,7 +175,7 @@ func (inv *Inventory) RemoveItem(slot int, count int) error {
 
 // GetItem 获取背包中的物品
 func (inv *Inventory) GetItem(slot int) (*Item, bool) {
-	item, exists := inv.items.Get(slot)
+	item, exists := inv.items.Load(slot)
 	if !exists {
 		return nil, false
 	}
@@ -205,7 +206,7 @@ func (inv *Inventory) Expand(size int) bool {
 // MoveItem 移动物品
 func (inv *Inventory) MoveItem(fromSlot int, toSlot int, count int) bool {
 	// 检查源槽位是否有物品
-	fromItemInterface, exists := inv.items.Get(fromSlot)
+	fromItemInterface, exists := inv.items.Load(fromSlot)
 	if !exists {
 		return false
 	}
@@ -217,7 +218,7 @@ func (inv *Inventory) MoveItem(fromSlot int, toSlot int, count int) bool {
 	}
 
 	// 检查目标槽位
-	toItemInterface, exists := inv.items.Get(toSlot)
+	toItemInterface, exists := inv.items.Load(toSlot)
 	if exists {
 		toItem := toItemInterface.(*Item)
 		// 检查是否可以堆叠
@@ -274,7 +275,7 @@ func (inv *Inventory) MoveItem(fromSlot int, toSlot int, count int) bool {
 // UseItem 使用物品
 func (inv *Inventory) UseItem(slot int, playerLevel int) bool {
 	// 检查槽位是否有物品
-	itemInterface, exists := inv.items.Get(slot)
+	itemInterface, exists := inv.items.Load(slot)
 	if !exists {
 		// 发布物品使用失败事件
 		eventData := &event.PlayerUseItemEventData{
@@ -369,7 +370,7 @@ func (inv *Inventory) HasSpace(count int, maxStack int) bool {
 
 	// 计算空槽位数量
 	for slot := 1; slot <= inv.size; slot++ {
-		if _, exists := inv.items.Get(slot); !exists {
+		if _, exists := inv.items.Load(slot); !exists {
 			emptySlots++
 		}
 	}

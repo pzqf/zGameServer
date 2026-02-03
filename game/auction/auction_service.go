@@ -13,19 +13,19 @@ import (
 // AuctionService 拍卖行服务
 type AuctionService struct {
 	zService.BaseService
-	items           *zMap.Map // key: int64(auctionId), value: *AuctionItem
-	playerItems     *zMap.Map // key: int64(playerId), value: []int64(auctionId)
-	pendingItems    []int64   // 待开始的拍卖物品ID
-	activeItems     []int64   // 进行中的拍卖物品ID
-	feeRate         float64   // 拍卖手续费率
-	minBidIncrement int64     // 最小竞拍加价
+	items           *zMap.ShardedMap // key: int64(auctionId), value: *AuctionItem
+	playerItems     *zMap.ShardedMap // key: int64(playerId), value: []int64(auctionId)
+	pendingItems    []int64          // 待开始的拍卖物品ID
+	activeItems     []int64          // 进行中的拍卖物品ID
+	feeRate         float64          // 拍卖手续费率
+	minBidIncrement int64            // 最小竞拍加价
 }
 
 func NewAuctionService() *AuctionService {
 	as := &AuctionService{
 		BaseService:     *zService.NewBaseService(common.ServiceIdAuction),
-		items:           zMap.NewMap(),
-		playerItems:     zMap.NewMap(),
+		items:           zMap.NewShardedMap32(),
+		playerItems:     zMap.NewShardedMap32(),
 		pendingItems:    make([]int64, 0),
 		activeItems:     make([]int64, 0),
 		feeRate:         0.05, // 5%手续费
@@ -74,7 +74,7 @@ func (as *AuctionService) checkPendingAuctions(currentTime int64) {
 	// 遍历待开始的拍卖列表
 	for i := 0; i < len(as.pendingItems); {
 		auctionId := as.pendingItems[i]
-		itemInterface, exists := as.items.Get(auctionId)
+		itemInterface, exists := as.items.Load(auctionId)
 		if !exists {
 			// 拍卖不存在，从列表中移除
 			as.pendingItems = append(as.pendingItems[:i], as.pendingItems[i+1:]...)
@@ -102,7 +102,7 @@ func (as *AuctionService) checkActiveAuctions(currentTime int64) {
 	// 遍历进行中的拍卖列表
 	for i := 0; i < len(as.activeItems); {
 		auctionId := as.activeItems[i]
-		itemInterface, exists := as.items.Get(auctionId)
+		itemInterface, exists := as.items.Load(auctionId)
 		if !exists {
 			// 拍卖不存在，从列表中移除
 			as.activeItems = append(as.activeItems[:i], as.activeItems[i+1:]...)
@@ -149,7 +149,7 @@ func (as *AuctionService) removeFromActiveItems(auctionId int64) {
 // CreateAuction 创建拍卖
 func (as *AuctionService) CreateAuction(item *AuctionItem) error {
 	// 检查拍卖物品是否已存在
-	if _, exists := as.items.Get(item.AuctionId); exists {
+	if _, exists := as.items.Load(item.AuctionId); exists {
 		return nil // 拍卖物品已存在
 	}
 
@@ -160,7 +160,7 @@ func (as *AuctionService) CreateAuction(item *AuctionItem) error {
 	as.items.Store(item.AuctionId, item)
 
 	// 添加到卖家的拍卖物品列表
-	if sellerItemsInterface, exists := as.playerItems.Get(item.SellerId); exists {
+	if sellerItemsInterface, exists := as.playerItems.Load(item.SellerId); exists {
 		sellerItems := sellerItemsInterface.([]int64)
 		sellerItems = append(sellerItems, item.AuctionId)
 		as.playerItems.Store(item.SellerId, sellerItems)
@@ -187,7 +187,7 @@ func (as *AuctionService) CreateAuction(item *AuctionItem) error {
 // PlaceBid 竞拍物品
 func (as *AuctionService) PlaceBid(playerId int64, playerName string, auctionId int64, bidPrice int64) error {
 	// 获取拍卖物品
-	itemInterface, exists := as.items.Get(auctionId)
+	itemInterface, exists := as.items.Load(auctionId)
 	if !exists {
 		return nil // 拍卖物品不存在
 	}
@@ -228,7 +228,7 @@ func (as *AuctionService) PlaceBid(playerId int64, playerName string, auctionId 
 // BuyoutItem 一口价购买物品
 func (as *AuctionService) BuyoutItem(playerId int64, playerName string, auctionId int64) error {
 	// 获取拍卖物品
-	itemInterface, exists := as.items.Get(auctionId)
+	itemInterface, exists := as.items.Load(auctionId)
 	if !exists {
 		return nil // 拍卖物品不存在
 	}
@@ -267,7 +267,7 @@ func (as *AuctionService) BuyoutItem(playerId int64, playerName string, auctionI
 // CancelAuction 取消拍卖
 func (as *AuctionService) CancelAuction(auctionId int64) error {
 	// 获取拍卖物品
-	itemInterface, exists := as.items.Get(auctionId)
+	itemInterface, exists := as.items.Load(auctionId)
 	if !exists {
 		return nil // 拍卖物品不存在
 	}
@@ -295,7 +295,7 @@ func (as *AuctionService) CancelAuction(auctionId int64) error {
 // SettleAuction 结算拍卖
 func (as *AuctionService) SettleAuction(auctionId int64) error {
 	// 获取拍卖物品
-	itemInterface, exists := as.items.Get(auctionId)
+	itemInterface, exists := as.items.Load(auctionId)
 	if !exists {
 		return nil // 拍卖物品不存在
 	}
@@ -320,7 +320,7 @@ func (as *AuctionService) SettleAuction(auctionId int64) error {
 
 // GetAuctionItem 获取拍卖物品信息
 func (as *AuctionService) GetAuctionItem(auctionId int64) (*AuctionItem, bool) {
-	item, exists := as.items.Get(auctionId)
+	item, exists := as.items.Load(auctionId)
 	if !exists {
 		return nil, false
 	}
@@ -329,7 +329,7 @@ func (as *AuctionService) GetAuctionItem(auctionId int64) (*AuctionItem, bool) {
 
 // GetPlayerAuctions 获取玩家的拍卖物品
 func (as *AuctionService) GetPlayerAuctions(playerId int64) ([]*AuctionItem, bool) {
-	auctionIdsInterface, exists := as.playerItems.Get(playerId)
+	auctionIdsInterface, exists := as.playerItems.Load(playerId)
 	if !exists {
 		return nil, false
 	}

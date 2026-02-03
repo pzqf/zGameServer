@@ -14,18 +14,18 @@ import (
 // GuildService 公会服务
 type GuildService struct {
 	zService.BaseService
-	guilds       *zMap.Map // key: int64(guildId), value: *Guild
-	playerGuild  *zMap.Map // key: int64(playerId), value: int64(guildId)
-	guildNameMap *zMap.Map // key: string(guildName), value: int64(guildId)
+	guilds       *zMap.ShardedMap // key: int64(guildId), value: *Guild
+	playerGuild  *zMap.ShardedMap // key: int64(playerId), value: int64(guildId)
+	guildNameMap *zMap.ShardedMap // key: string(guildName), value: int64(guildId)
 	maxGuilds    int
 }
 
 func NewGuildService() *GuildService {
 	gs := &GuildService{
 		BaseService:  *zService.NewBaseService(common.ServiceIdGuild),
-		guilds:       zMap.NewMap(),
-		playerGuild:  zMap.NewMap(),
-		guildNameMap: zMap.NewMap(),
+		guilds:       zMap.NewShardedMap32(),
+		playerGuild:  zMap.NewShardedMap32(),
+		guildNameMap: zMap.NewShardedMap32(),
 		maxGuilds:    1000,
 	}
 	return gs
@@ -57,7 +57,7 @@ func (gs *GuildService) Serve() {
 // CreateGuild 创建公会
 func (gs *GuildService) CreateGuild(guildId int64, guildName string, leaderId int64, leaderName string) (*Guild, error) {
 	// 检查公会名称是否已存在
-	if _, exists := gs.guildNameMap.Get(guildName); exists {
+	if _, exists := gs.guildNameMap.Load(guildName); exists {
 		return nil, nil // 公会名称已存在
 	}
 
@@ -67,7 +67,7 @@ func (gs *GuildService) CreateGuild(guildId int64, guildName string, leaderId in
 	}
 
 	// 检查玩家是否已加入其他公会
-	if _, exists := gs.playerGuild.Get(leaderId); exists {
+	if _, exists := gs.playerGuild.Load(leaderId); exists {
 		return nil, nil // 玩家已加入其他公会
 	}
 
@@ -109,8 +109,8 @@ func (gs *GuildService) CreateGuild(guildId int64, guildName string, leaderId in
 		LeaderId:         leaderId,
 		MemberCount:      1,
 		MaxMembers:       20,
-		Members:          zMap.NewMap(),
-		Applies:          zMap.NewMap(),
+		Members:          zMap.NewShardedMap32(),
+		Applies:          zMap.NewShardedMap32(),
 		CreateTime:       currentTime,
 		Notice:           "欢迎加入公会！",
 		WarScore:         0,
@@ -142,14 +142,14 @@ func (gs *GuildService) CreateGuild(guildId int64, guildName string, leaderId in
 // JoinGuild 加入公会
 func (gs *GuildService) JoinGuild(playerId int64, playerName string, guildId int64) error {
 	// 检查公会是否存在
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return nil // 公会不存在
 	}
 	guild := guildInterface.(*Guild)
 
 	// 检查玩家是否已加入其他公会
-	if _, exists := gs.playerGuild.Get(playerId); exists {
+	if _, exists := gs.playerGuild.Load(playerId); exists {
 		return nil // 玩家已加入其他公会
 	}
 
@@ -168,14 +168,14 @@ func (gs *GuildService) JoinGuild(playerId int64, playerName string, guildId int
 // LeaveGuild 离开公会
 func (gs *GuildService) LeaveGuild(playerId int64) error {
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(playerId)
+	guildIdInterface, exists := gs.playerGuild.Load(playerId)
 	if !exists {
 		return nil // 玩家未加入公会
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return nil // 公会不存在
 	}
@@ -202,7 +202,7 @@ func (gs *GuildService) LeaveGuild(playerId int64) error {
 // DisbandGuild 解散公会
 func (gs *GuildService) DisbandGuild(guildId int64) error {
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return nil // 公会不存在
 	}
@@ -227,7 +227,7 @@ func (gs *GuildService) DisbandGuild(guildId int64) error {
 
 // GetGuild 获取公会信息
 func (gs *GuildService) GetGuild(guildId int64) (*Guild, bool) {
-	guild, exists := gs.guilds.Get(guildId)
+	guild, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return nil, false
 	}
@@ -236,7 +236,7 @@ func (gs *GuildService) GetGuild(guildId int64) (*Guild, bool) {
 
 // GetGuildByPlayer 获取玩家所在的公会
 func (gs *GuildService) GetGuildByPlayer(playerId int64) (*Guild, bool) {
-	guildIdInterface, exists := gs.playerGuild.Get(playerId)
+	guildIdInterface, exists := gs.playerGuild.Load(playerId)
 	if !exists {
 		return nil, false
 	}
@@ -247,12 +247,12 @@ func (gs *GuildService) GetGuildByPlayer(playerId int64) (*Guild, bool) {
 // ApplyGuild 申请加入公会
 func (gs *GuildService) ApplyGuild(applyId int64, playerId int64, playerName string, guildId int64, remark string) error {
 	// 检查玩家是否已加入其他公会
-	if _, exists := gs.playerGuild.Get(playerId); exists {
+	if _, exists := gs.playerGuild.Load(playerId); exists {
 		return nil // 玩家已加入其他公会
 	}
 
 	// 检查公会是否存在
-	if _, exists := gs.guilds.Get(guildId); !exists {
+	if _, exists := gs.guilds.Load(guildId); !exists {
 		return nil // 公会不存在
 	}
 
@@ -271,7 +271,7 @@ func (gs *GuildService) ApplyGuild(applyId int64, playerId int64, playerName str
 	}
 
 	// 获取公会
-	guildInterface, _ := gs.guilds.Get(guildId)
+	guildInterface, _ := gs.guilds.Load(guildId)
 	guild := guildInterface.(*Guild)
 
 	// 存储申请
@@ -332,7 +332,7 @@ func (gs *GuildService) transferGuildLeader(guild *Guild, oldLeaderId int64) {
 		guild.LeaderId = newLeaderId
 
 		// 更新旧会长的职位为普通成员
-		if memberInterface, exists := guild.Members.Get(oldLeaderId); exists {
+		if memberInterface, exists := guild.Members.Load(oldLeaderId); exists {
 			oldLeader := memberInterface.(*GuildMember)
 			oldLeader.Position = GuildPositionMember
 			guild.Members.Store(oldLeaderId, oldLeader)
@@ -350,14 +350,14 @@ func (gs *GuildService) SetGuildMemberPosition(operatorId int64, targetPlayerId 
 	}
 
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(targetPlayerId)
+	guildIdInterface, exists := gs.playerGuild.Load(targetPlayerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return ErrGuildNotExists
 	}
@@ -391,14 +391,14 @@ func (gs *GuildService) UpdateGuildNotice(operatorId int64, notice string) error
 	}
 
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(operatorId)
+	guildIdInterface, exists := gs.playerGuild.Load(operatorId)
 	if !exists {
 		return nil // 玩家未加入公会
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return nil // 公会不存在
 	}
@@ -414,21 +414,21 @@ func (gs *GuildService) UpdateGuildNotice(operatorId int64, notice string) error
 // checkGuildPermission 检查公会权限（基于职位的权限检查）
 func (gs *GuildService) checkGuildPermission(playerId int64, requiredPosition int) error {
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(playerId)
+	guildIdInterface, exists := gs.playerGuild.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return ErrGuildNotExists
 	}
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.Members.Get(playerId)
+	memberInterface, exists := guild.Members.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
@@ -445,14 +445,14 @@ func (gs *GuildService) checkGuildPermission(playerId int64, requiredPosition in
 // CheckGuildPermission 检查公会权限（基于权限掩码的细粒度检查）
 func (gs *GuildService) CheckGuildPermission(playerId int64, permission int64) error {
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(playerId)
+	guildIdInterface, exists := gs.playerGuild.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return ErrGuildNotExists
 	}
@@ -476,7 +476,7 @@ func (gs *GuildService) ProcessGuildApply(operatorId int64, applyId int64, accep
 
 	gs.guilds.Range(func(key, value interface{}) bool {
 		g := value.(*Guild)
-		if a, exists := g.Applies.Get(applyId); exists {
+		if a, exists := g.Applies.Load(applyId); exists {
 			apply = a.(*GuildApply)
 			guild = g
 			found = true
@@ -515,21 +515,21 @@ func (gs *GuildService) ProcessGuildApply(operatorId int64, applyId int64, accep
 // UpdateGuildMemberOnlineStatus 更新公会成员在线状态
 func (gs *GuildService) UpdateGuildMemberOnlineStatus(playerId int64, online bool) error {
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(playerId)
+	guildIdInterface, exists := gs.playerGuild.Load(playerId)
 	if !exists {
 		return nil // 玩家未加入公会
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return nil // 公会不存在
 	}
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.Members.Get(playerId)
+	memberInterface, exists := guild.Members.Load(playerId)
 	if !exists {
 		return nil // 玩家不在公会中
 	}
@@ -551,7 +551,7 @@ func (gs *GuildService) UpdateGuildMemberOnlineStatus(playerId int64, online boo
 // GetGuildMembers 获取公会成员列表
 func (gs *GuildService) GetGuildMembers(guildId int64) ([]*GuildMember, error) {
 	// 检查公会是否存在
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return nil, ErrGuildNotExists
 	}
@@ -571,21 +571,21 @@ func (gs *GuildService) GetGuildMembers(guildId int64) ([]*GuildMember, error) {
 // UpdateGuildMemberContribution 更新公会成员贡献
 func (gs *GuildService) UpdateGuildMemberContribution(playerId int64, amount int64) error {
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(playerId)
+	guildIdInterface, exists := gs.playerGuild.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return ErrGuildNotExists
 	}
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.Members.Get(playerId)
+	memberInterface, exists := guild.Members.Load(playerId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
@@ -606,21 +606,21 @@ func (gs *GuildService) UpdateGuildMemberContribution(playerId int64, amount int
 // GetGuildMemberContribution 获取公会成员贡献
 func (gs *GuildService) GetGuildMemberContribution(playerId int64) (int64, error) {
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(playerId)
+	guildIdInterface, exists := gs.playerGuild.Load(playerId)
 	if !exists {
 		return 0, ErrPlayerNotInGuild
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return 0, ErrGuildNotExists
 	}
 	guild := guildInterface.(*Guild)
 
 	// 获取玩家在公会中的信息
-	memberInterface, exists := guild.Members.Get(playerId)
+	memberInterface, exists := guild.Members.Load(playerId)
 	if !exists {
 		return 0, ErrPlayerNotInGuild
 	}
@@ -637,14 +637,14 @@ func (gs *GuildService) UpgradeGuild(operatorId int64) error {
 	}
 
 	// 检查玩家是否已加入公会
-	guildIdInterface, exists := gs.playerGuild.Get(operatorId)
+	guildIdInterface, exists := gs.playerGuild.Load(operatorId)
 	if !exists {
 		return ErrPlayerNotInGuild
 	}
 	guildId := guildIdInterface.(int64)
 
 	// 获取公会
-	guildInterface, exists := gs.guilds.Get(guildId)
+	guildInterface, exists := gs.guilds.Load(guildId)
 	if !exists {
 		return ErrGuildNotExists
 	}

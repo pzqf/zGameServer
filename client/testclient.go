@@ -72,150 +72,150 @@ func main() {
 
 	if loginResp.Success {
 		// 检查是否有角色
-		var characterId int64
-		if len(loginResp.Characters) == 0 {
+		var playerId int64
+		if len(loginResp.Players) == 0 {
 			// 创建新角色
-			fmt.Println("No characters found, creating new character...")
-			charCreateReq := protocol.CharacterCreateRequest{
-				Name: "TestChar7",
+			fmt.Println("No players found, creating new player...")
+			playerCreateReq := protocol.PlayerCreateRequest{
+				Name: "TestPlayer7",
 				Sex:  1,
 				Age:  20,
 			}
 
-			charCreateData, err := proto.Marshal(&charCreateReq)
+			playerCreateData, err := proto.Marshal(&playerCreateReq)
 			if err != nil {
-				fmt.Printf("Failed to marshal character create request: %v\n", err)
+				fmt.Printf("Failed to marshal player create request: %v\n", err)
 				return
 			}
 
-			// 创建角色创建数据包
-			charCreatePacket := &zNet.NetPacket{
-				ProtoId:  int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_CREATE),
-				DataSize: int32(len(charCreateData)),
+			// 创建玩家创建数据包
+			playerCreatePacket := &zNet.NetPacket{
+				ProtoId:  int32(protocol.PlayerMsgId_MSG_PLAYER_PLAYER_CREATE),
+				DataSize: int32(len(playerCreateData)),
 				Version:  0,
-				Data:     charCreateData,
+				Data:     playerCreateData,
 			}
 
-			// 发送角色创建请求
-			if _, err := conn.Write(charCreatePacket.Marshal()); err != nil {
-				fmt.Printf("Failed to send character create request: %v\n", err)
+			// 发送玩家创建请求
+			if _, err := conn.Write(playerCreatePacket.Marshal()); err != nil {
+				fmt.Printf("Failed to send player create request: %v\n", err)
 				return
 			}
 
-			fmt.Println("Sent character create request")
+			fmt.Println("Sent player create request")
 
-			// 接收角色创建响应
-			charCreateRespPacket, err := readPacket(conn)
+			// 接收玩家创建响应
+			playerCreateRespPacket, err := readPacket(conn)
 			if err != nil {
-				fmt.Printf("Failed to read character create response: %v\n", err)
+				fmt.Printf("Failed to read player create response: %v\n", err)
 				return
 			}
 
-			// 解析角色创建响应
-			var charCreateResp protocol.CharacterCreateResponse
-			if err := proto.Unmarshal(charCreateRespPacket.Data, &charCreateResp); err != nil {
-				fmt.Printf("Failed to unmarshal character create response: %v\n", err)
+			// 解析玩家创建响应
+			var playerCreateResp protocol.PlayerCreateResponse
+			if err := proto.Unmarshal(playerCreateRespPacket.Data, &playerCreateResp); err != nil {
+				fmt.Printf("Failed to unmarshal player create response: %v\n", err)
 				return
 			}
 
-			fmt.Printf("Character create response: Success=%v, Message=%s\n", charCreateResp.Success, charCreateResp.ErrorMsg)
+			fmt.Printf("Player create response: Success=%v, Message=%s\n", playerCreateResp.Success, playerCreateResp.ErrorMsg)
 
-			if charCreateResp.Success {
-				characterId = charCreateResp.Character.CharacterId
+			if playerCreateResp.Success {
+				playerId = playerCreateResp.Player.PlayerId
 			}
 		} else {
-			// 使用第一个角色
-			characterId = loginResp.Characters[0].CharacterId
+			// 使用第一个玩家
+			playerId = loginResp.Players[0].PlayerId
 		}
 
-		// 角色登录
-		charLoginReq := protocol.CharacterLoginRequest{
-			CharacterId: characterId,
+		// 玩家登录
+		playerLoginReq := protocol.PlayerLoginRequest{
+			PlayerId: playerId,
 		}
 
-		charLoginData, err := proto.Marshal(&charLoginReq)
+		playerLoginData, err := proto.Marshal(&playerLoginReq)
 		if err != nil {
-			fmt.Printf("Failed to marshal character login request: %v\n", err)
+			fmt.Printf("Failed to marshal player login request: %v\n", err)
 			return
 		}
 
-		// 创建角色登录数据包
-		charLoginPacket := &zNet.NetPacket{
-			ProtoId:  int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGIN),
-			DataSize: int32(len(charLoginData)),
+		// 创建玩家登录数据包
+		playerLoginPacket := &zNet.NetPacket{
+			ProtoId:  int32(protocol.PlayerMsgId_MSG_PLAYER_PLAYER_LOGIN),
+			DataSize: int32(len(playerLoginData)),
 			Version:  0,
-			Data:     charLoginData,
+			Data:     playerLoginData,
 		}
 
-		// 发送角色登录请求
-		if _, err := conn.Write(charLoginPacket.Marshal()); err != nil {
-			fmt.Printf("Failed to send character login request: %v\n", err)
+		// 发送玩家登录请求
+		if _, err := conn.Write(playerLoginPacket.Marshal()); err != nil {
+			fmt.Printf("Failed to send player login request: %v\n", err)
 			return
 		}
 
-		fmt.Println("Sent character login request")
+		fmt.Println("Sent player login request")
 
-		// 接收角色登录响应
-		charLoginRespPacket, err := readPacket(conn)
+		// 接收玩家登录响应
+		playerLoginRespPacket, err := readPacket(conn)
 		if err != nil {
-			fmt.Printf("Failed to read character login response: %v\n", err)
+			fmt.Printf("Failed to read player login response: %v\n", err)
 			return
 		}
 
-		// 解析角色登录响应
-		var charLoginResp protocol.CharacterLoginResponse
-		if err := proto.Unmarshal(charLoginRespPacket.Data, &charLoginResp); err != nil {
-			fmt.Printf("Failed to unmarshal character login response: %v\n", err)
+		// 解析玩家登录响应
+		var playerLoginResp protocol.PlayerLoginResponse
+		if err := proto.Unmarshal(playerLoginRespPacket.Data, &playerLoginResp); err != nil {
+			fmt.Printf("Failed to unmarshal player login response: %v\n", err)
 			return
 		}
 
-		fmt.Printf("Character login response: Success=%v, Message=%s\n", charLoginResp.Success, charLoginResp.ErrorMsg)
+		fmt.Printf("Player login response: Success=%v, Message=%s\n", playerLoginResp.Success, playerLoginResp.ErrorMsg)
 
 		// 等待一段时间
 		time.Sleep(2 * time.Second)
 
-		// 测试角色登出请求
-		charLogoutReq := protocol.CharacterLogoutRequest{
-			CharacterId: characterId,
+		// 测试玩家登出请求
+		playerLogoutReq := protocol.PlayerLogoutRequest{
+			PlayerId: playerId,
 		}
 
-		charLogoutData, err := proto.Marshal(&charLogoutReq)
+		playerLogoutData, err := proto.Marshal(&playerLogoutReq)
 		if err != nil {
-			fmt.Printf("Failed to marshal character logout request: %v\n", err)
+			fmt.Printf("Failed to marshal player logout request: %v\n", err)
 			return
 		}
 
-		// 创建角色登出数据包
-		charLogoutPacket := &zNet.NetPacket{
-			ProtoId:  int32(protocol.PlayerMsgId_MSG_PLAYER_CHARACTER_LOGOUT),
-			DataSize: int32(len(charLogoutData)),
+		// 创建玩家登出数据包
+		playerLogoutPacket := &zNet.NetPacket{
+			ProtoId:  int32(protocol.PlayerMsgId_MSG_PLAYER_PLAYER_LOGOUT),
+			DataSize: int32(len(playerLogoutData)),
 			Version:  0,
-			Data:     charLogoutData,
+			Data:     playerLogoutData,
 		}
 
-		// 发送角色登出请求
-		if _, err := conn.Write(charLogoutPacket.Marshal()); err != nil {
-			fmt.Printf("Failed to send character logout request: %v\n", err)
+		// 发送玩家登出请求
+		if _, err := conn.Write(playerLogoutPacket.Marshal()); err != nil {
+			fmt.Printf("Failed to send player logout request: %v\n", err)
 			return
 		}
 
-		fmt.Println("Sent character logout request")
+		fmt.Println("Sent player logout request")
 
-		// 接收角色登出响应
-		charLogoutRespPacket, err := readPacket(conn)
+		// 接收玩家登出响应
+		playerLogoutRespPacket, err := readPacket(conn)
 		if err != nil {
-			fmt.Printf("Failed to read character logout response: %v\n", err)
+			fmt.Printf("Failed to read player logout response: %v\n", err)
 			return
 		}
 
-		// 解析角色登出响应
-		var charLogoutResp protocol.CharacterLogoutResponse
-		if err := proto.Unmarshal(charLogoutRespPacket.Data, &charLogoutResp); err != nil {
-			fmt.Printf("Failed to unmarshal character logout response: %v\n", err)
+		// 解析玩家登出响应
+		var playerLogoutResp protocol.PlayerLogoutResponse
+		if err := proto.Unmarshal(playerLogoutRespPacket.Data, &playerLogoutResp); err != nil {
+			fmt.Printf("Failed to unmarshal player logout response: %v\n", err)
 			return
 		}
 
-		fmt.Printf("Character logout response: Success=%v, Message=%s\n", charLogoutResp.Success, charLogoutResp.ErrorMsg)
+		fmt.Printf("Player logout response: Success=%v, Message=%s\n", playerLogoutResp.Success, playerLogoutResp.ErrorMsg)
 	}
 
 	fmt.Println("Test completed!")

@@ -2,10 +2,13 @@ package player
 
 import (
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
+
+type EquipPosType int
 
 // 装备位置定义
 const (
@@ -24,33 +27,33 @@ const (
 // Equipment 装备系统
 type Equipment struct {
 	*component.BaseComponent
-	playerId   int64
-	equipments *zMap.Map // key: int(equipPos), value: *Item
+	playerId   common.PlayerIdType
+	equipments *zMap.TypedMap[EquipPosType, *Item] // key: int(equipPos), value: *Item
 }
 
-func NewEquipment(playerId int64) *Equipment {
+func NewEquipment(playerId common.PlayerIdType) *Equipment {
 	return &Equipment{
 		BaseComponent: component.NewBaseComponent("equipment"),
 		playerId:      playerId,
-		equipments:    zMap.NewMap(),
+		equipments:    zMap.NewTypedMap[EquipPosType, *Item](),
 	}
 }
 
 func (eq *Equipment) Init() error {
 	// 初始化装备系统
-	zLog.Debug("Initializing equipment", zap.Int64("playerId", eq.playerId))
+	zLog.Debug("Initializing equipment", zap.Int64("playerId", int64(eq.playerId)))
 	return nil
 }
 
 // Destroy 销毁装备组件
 func (eq *Equipment) Destroy() {
 	// 清理装备资源
-	zLog.Debug("Destroying equipment", zap.Int64("playerId", eq.playerId))
+	zLog.Debug("Destroying equipment", zap.Int64("playerId", int64(eq.playerId)))
 	eq.equipments.Clear()
 }
 
 // Equip 装备物品
-func (eq *Equipment) Equip(equipPos int, item *Item) (*Item, error) {
+func (eq *Equipment) Equip(equipPos EquipPosType, item *Item) (*Item, error) {
 	// 检查装备位置是否合法
 	if !eq.IsValidEquipPos(equipPos) {
 		return nil, nil // 无效的装备位置
@@ -62,60 +65,62 @@ func (eq *Equipment) Equip(equipPos int, item *Item) (*Item, error) {
 	}
 
 	// 获取当前装备的物品（如果有）
-	oldItem, exists := eq.equipments.Get(equipPos)
+	oldItem, exists := eq.equipments.Load(equipPos)
 	var oldItemPtr *Item
 	if exists {
-		oldItemPtr = oldItem.(*Item)
+		oldItemPtr = oldItem
 	}
 
 	// 装备新物品
 	eq.equipments.Store(equipPos, item)
-	zLog.Info("Item equipped", zap.Int64("playerId", eq.playerId), zap.Int("equipPos", equipPos), zap.Int64("itemId", item.itemId))
+	zLog.Info("Item equipped", zap.Int64("playerId", int64(eq.playerId)),
+		zap.Int("equipPos", int(equipPos)), zap.Int64("itemId", item.itemId))
 
 	return oldItemPtr, nil
 }
 
 // Unequip 卸下装备
-func (eq *Equipment) Unequip(equipPos int) (*Item, error) {
+func (eq *Equipment) Unequip(equipPos EquipPosType) (*Item, error) {
 	// 检查装备位置是否合法
 	if !eq.IsValidEquipPos(equipPos) {
 		return nil, nil // 无效的装备位置
 	}
 
 	// 获取装备的物品
-	item, exists := eq.equipments.Get(equipPos)
+	item, exists := eq.equipments.Load(equipPos)
 	if !exists {
 		return nil, nil // 该位置没有装备物品
 	}
 
 	// 卸下装备
 	eq.equipments.Delete(equipPos)
-	zLog.Info("Item unequipped", zap.Int64("playerId", eq.playerId), zap.Int("equipPos", equipPos))
+	zLog.Info("Item unequipped", zap.Int64("playerId", int64(eq.playerId)),
+		zap.Int("equipPos", int(equipPos)))
 
-	return item.(*Item), nil
+	return item, nil
 }
 
 // GetEquipment 获取指定位置的装备
-func (eq *Equipment) GetEquipment(equipPos int) (*Item, bool) {
-	item, exists := eq.equipments.Get(equipPos)
+func (eq *Equipment) GetEquipment(equipPos EquipPosType) (*Item, bool) {
+	item, exists := eq.equipments.Load(equipPos)
 	if !exists {
 		return nil, false
 	}
-	return item.(*Item), true
+	return item, true
 }
 
 // GetAllEquipments 获取所有装备
-func (eq *Equipment) GetAllEquipments() *zMap.Map {
+func (eq *Equipment) GetAllEquipments() *zMap.TypedMap[EquipPosType, *Item] {
 	return eq.equipments
 }
 
 // IsValidEquipPos 检查装备位置是否合法
-func (eq *Equipment) IsValidEquipPos(equipPos int) bool {
+func (eq *Equipment) IsValidEquipPos(equipPos EquipPosType) bool {
 	return equipPos >= EquipPosWeapon && equipPos <= EquipPosShoulder
 }
 
 // CanEquip 检查物品是否可以装备到指定位置
-func (eq *Equipment) CanEquip(item *Item, equipPos int) bool {
+func (eq *Equipment) CanEquip(item *Item, equipPos EquipPosType) bool {
 	// 这里应该有更复杂的检查逻辑，如物品类型、玩家等级等
 	// 简化实现，假设所有物品都可以装备到任何位置
 	return true

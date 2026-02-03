@@ -19,17 +19,15 @@ const (
 type PlayerActor struct {
 	*zActor.BaseActor
 	Player *Player
-	Update chan struct{}
 }
 
-func NewPlayerActor(playerID int64, name string, session *zNet.TcpServerSession) *PlayerActor {
-	baseActor := zActor.NewBaseActor(playerID, PlayerActorMsgChanSize)
+func NewPlayerActor(playerID common.PlayerIdType, name string, session *zNet.TcpServerSession) *PlayerActor {
+	baseActor := zActor.NewBaseActor(int64(playerID), PlayerActorMsgChanSize)
 	player := NewPlayer(playerID, name, session)
 
 	actor := &PlayerActor{
 		BaseActor: baseActor,
 		Player:    player,
-		Update:    make(chan struct{}, 1),
 	}
 
 	return actor
@@ -59,7 +57,7 @@ func (pa *PlayerActor) ProcessMessage(msg zActor.ActorMessage) {
 	case *PlayerActorNetworkMessage:
 		if pa.Player != nil {
 			zLog.Info("Player received network packet",
-				zap.Int64("playerId", pa.Player.GetPlayerId()))
+				zap.Int64("playerId", int64(pa.Player.GetPlayerId())))
 		}
 	}
 }
@@ -76,4 +74,36 @@ func (pa *PlayerActor) Run() {
 			pa.Player.Update(float64(PlayerUpdateInterval.Milliseconds()))
 		}
 	}
+}
+
+// Stop 重写Stop()方法，确保完整的资源清理
+func (pa *PlayerActor) Stop() error {
+	if pa.Player != nil {
+		// 调用玩家的Logout()方法，处理玩家登出逻辑
+		pa.Player.Logout()
+
+		// 关闭玩家的会话（如果存在）
+		if session := pa.Player.GetSession(); session != nil {
+			session.Close()
+		}
+	}
+
+	// 调用父类的Stop()方法，关闭消息通道
+	err := pa.BaseActor.Stop()
+	if err != nil {
+		zLog.Error("Failed to stop base actor", zap.Int64("playerId", pa.ID()), zap.Error(err))
+		return err
+	}
+
+	// 记录玩家Actor停止
+	if pa.Player != nil {
+		zLog.Info("Player actor stopped",
+			zap.Int64("playerId", int64(pa.Player.GetPlayerId())),
+			zap.Int64("actorId", pa.ID()))
+	} else {
+		zLog.Info("Player actor stopped",
+			zap.Int64("actorId", pa.ID()))
+	}
+
+	return nil
 }

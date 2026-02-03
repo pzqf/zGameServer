@@ -2,6 +2,7 @@ package player
 
 import (
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
@@ -74,12 +75,12 @@ type Task struct {
 // TaskManager 任务管理系统
 type TaskManager struct {
 	*component.BaseComponent
-	playerId int64
+	playerId common.PlayerIdType
 	tasks    *zMap.Map // key: int64(taskId), value: *Task
 	maxCount int
 }
 
-func NewTaskManager(playerId int64) *TaskManager {
+func NewTaskManager(playerId common.PlayerIdType) *TaskManager {
 	return &TaskManager{
 		BaseComponent: component.NewBaseComponent("tasks"),
 		playerId:      playerId,
@@ -90,21 +91,21 @@ func NewTaskManager(playerId int64) *TaskManager {
 
 func (tm *TaskManager) Init() error {
 	// 初始化任务管理系统
-	zLog.Debug("Initializing task manager", zap.Int64("playerId", tm.playerId))
+	zLog.Debug("Initializing task manager", zap.Int64("playerId", int64(tm.playerId)))
 	return nil
 }
 
 // Destroy 销毁任务管理组件
 func (tm *TaskManager) Destroy() {
 	// 清理任务管理资源
-	zLog.Debug("Destroying task manager", zap.Int64("playerId", tm.playerId))
+	zLog.Debug("Destroying task manager", zap.Int64("playerId", int64(tm.playerId)))
 	tm.tasks.Clear()
 }
 
 // AcceptTask 接受任务
 func (tm *TaskManager) AcceptTask(task *Task) error {
 	// 检查任务是否已接受
-	if _, exists := tm.tasks.Get(task.taskId); exists {
+	if _, exists := tm.tasks.Load(task.taskId); exists {
 		return nil // 任务已接受
 	}
 
@@ -116,14 +117,14 @@ func (tm *TaskManager) AcceptTask(task *Task) error {
 	// 接受任务
 	task.status = TaskStatusInProgress
 	tm.tasks.Store(task.taskId, task)
-	zLog.Info("Task accepted", zap.Int64("taskId", task.taskId), zap.Int64("playerId", tm.playerId))
+	zLog.Info("Task accepted", zap.Int64("taskId", task.taskId), zap.Int64("playerId", int64(tm.playerId)))
 	return nil
 }
 
 // UpdateTaskProgress 更新任务进度
 func (tm *TaskManager) UpdateTaskProgress(taskId int64, condType int, progress int) error {
 	// 获取任务
-	taskInterface, exists := tm.tasks.Get(taskId)
+	taskInterface, exists := tm.tasks.Load(taskId)
 	if !exists {
 		return nil // 任务不存在
 	}
@@ -157,7 +158,7 @@ func (tm *TaskManager) UpdateTaskProgress(taskId int64, condType int, progress i
 	// 如果所有条件都完成，将任务状态改为已完成
 	if allCompleted {
 		task.status = TaskStatusCompleted
-		zLog.Info("Task completed", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
+		zLog.Info("Task completed", zap.Int64("taskId", taskId), zap.Int64("playerId", int64(tm.playerId)))
 	}
 
 	// 更新任务
@@ -168,7 +169,7 @@ func (tm *TaskManager) UpdateTaskProgress(taskId int64, condType int, progress i
 // CompleteTask 完成任务
 func (tm *TaskManager) CompleteTask(taskId int64) ([]*TaskReward, error) {
 	// 获取任务
-	taskInterface, exists := tm.tasks.Get(taskId)
+	taskInterface, exists := tm.tasks.Load(taskId)
 	if !exists {
 		return nil, nil // 任务不存在
 	}
@@ -183,13 +184,13 @@ func (tm *TaskManager) CompleteTask(taskId int64) ([]*TaskReward, error) {
 	tm.tasks.Store(taskId, task)
 
 	// 返回任务奖励
-	zLog.Info("Task rewarded", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
+	zLog.Info("Task rewarded", zap.Int64("taskId", taskId), zap.Int64("playerId", int64(tm.playerId)))
 	return task.rewards, nil
 }
 
 // GetTask 获取任务信息
 func (tm *TaskManager) GetTask(taskId int64) (*Task, bool) {
-	task, exists := tm.tasks.Get(taskId)
+	task, exists := tm.tasks.Load(taskId)
 	if !exists {
 		return nil, false
 	}
@@ -241,7 +242,7 @@ func (tm *TaskManager) GetCompletedTasks() []*Task {
 // AbandonTask 放弃任务
 func (tm *TaskManager) AbandonTask(taskId int64) bool {
 	// 获取任务
-	taskInterface, exists := tm.tasks.Get(taskId)
+	taskInterface, exists := tm.tasks.Load(taskId)
 	if !exists {
 		return false // 任务不存在
 	}
@@ -254,6 +255,6 @@ func (tm *TaskManager) AbandonTask(taskId int64) bool {
 
 	// 删除任务
 	tm.tasks.Delete(taskId)
-	zLog.Info("Task abandoned", zap.Int64("taskId", taskId), zap.Int64("playerId", tm.playerId))
+	zLog.Info("Task abandoned", zap.Int64("taskId", taskId), zap.Int64("playerId", int64(tm.playerId)))
 	return true
 }

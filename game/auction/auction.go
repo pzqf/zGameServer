@@ -48,6 +48,6 @@ type AuctionItem struct {
 	EndTime       int64
 	Status        int
 	CurrentWinner int64
-	Bids          zMap.Map // key: int64(bidId), value: *AuctionBid
+	Bids          *zMap.ShardedMap // key: int64(bidId), value: *AuctionBid
 	IsSettled     bool
 }

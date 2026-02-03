@@ -7,6 +7,7 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zGameServer/db"
 	"github.com/pzqf/zGameServer/db/models"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/player"
 	"github.com/pzqf/zGameServer/net/protocol"
 	"github.com/pzqf/zGameServer/net/router"
@@ -18,8 +19,8 @@ type PlayerHandler struct {
 	playerService  *player.PlayerService
 	accountSession map[string]zNet.SessionIdType
 	sessionAccount map[zNet.SessionIdType]string
-	charSession    map[int64]zNet.SessionIdType
-	sessionChar    map[zNet.SessionIdType]int64
+	playerSession  map[common.PlayerIdType]zNet.SessionIdType
+	sessionPlayer  map[zNet.SessionIdType]common.PlayerIdType
 }
 
 func NewPlayerNetHandler(playerService *player.PlayerService) *PlayerHandler {
@@ -27,8 +28,8 @@ func NewPlayerNetHandler(playerService *player.PlayerService) *PlayerHandler {
 		playerService:  playerService,
 		accountSession: make(map[string]zNet.SessionIdType),
 		sessionAccount: make(map[zNet.SessionIdType]string),
-		charSession:    make(map[int64]zNet.SessionIdType),
-		sessionChar:    make(map[zNet.SessionIdType]int64),
+		playerSession:  make(map[common.PlayerIdType]zNet.SessionIdType),
+		sessionPlayer:  make(map[zNet.SessionIdType]common.PlayerIdType),
 	}
 }
 
@@ -39,9 +40,9 @@ func RegisterPlayerNetHandlers(router *router.PacketRouter, playerService *playe
 
 	router.RegisterHandler(1001, handler.handleAccountCreate)
 	router.RegisterHandler(1002, handler.handleAccountLogin)
-	router.RegisterHandler(1003, handler.handleCharacterCreate)
-	router.RegisterHandler(1004, handler.handleCharacterLogin)
-	router.RegisterHandler(1005, handler.handleCharacterLogout)
+	router.RegisterHandler(1003, handler.handlePlayerCreate)
+	router.RegisterHandler(1004, handler.handlePlayerLogin)
+	router.RegisterHandler(1005, handler.handlePlayerLogout)
 
 	//todo 将来可优化，明确哪些消息需转发给玩家协程处理
 	for i := 1006; i <= 2000; i++ {
@@ -50,19 +51,19 @@ func RegisterPlayerNetHandlers(router *router.PacketRouter, playerService *playe
 }
 
 func (h *PlayerHandler) handlePlayerMessage(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
-	playerId, ok := h.sessionChar[session.GetSid()]
+	playerId, ok := h.sessionPlayer[session.GetSid()]
 	if !ok {
 		zLog.Warn("Player not found for session", zap.Uint64("sessionId", session.GetSid()))
 		return nil
 	}
 
-	playerActor := h.playerService.GetPlayerActor(playerId)
+	playerActor := h.playerService.GetPlayerActor(common.PlayerIdType(playerId))
 	if playerActor == nil {
-		zLog.Warn("Player actor not found", zap.Int64("playerId", playerId))
+		zLog.Warn("Player actor not found", zap.Int64("playerId", int64(playerId)))
 		return nil
 	}
 
-	msg := player.NewPlayerActorNetworkMessage(playerId, packet)
+	msg := player.NewPlayerActorNetworkMessage(int64(playerId), packet)
 	playerActor.SendMessage(msg)
 	return nil
 }
@@ -190,23 +191,23 @@ func (h *PlayerHandler) handleAccountLogin(session *zNet.TcpServerSession, packe
 	h.accountSession[req.Account] = session.GetSid()
 	h.sessionAccount[session.GetSid()] = req.Account
 
-	//todo 查询角色列表
+	//todo 查询玩家列表
 
 	resp := protocol.AccountLoginResponse{
-		Success:    true,
-		ErrorMsg:   "",
-		Characters: []*protocol.CharacterInfo{},
+		Success:  true,
+		ErrorMsg: "",
+		Players:  []*protocol.PlayerInfo{},
 	}
 	respData, _ := proto.Marshal(&resp)
 	return session.Send(1002, respData)
 }
 
-func (h *PlayerHandler) handleCharacterCreate(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
-	zLog.Debug("Received character create request", zap.Int64("sessionId", int64(session.GetSid())))
+func (h *PlayerHandler) handlePlayerCreate(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+	zLog.Debug("Received player create request", zap.Int64("sessionId", int64(session.GetSid())))
 
 	account, ok := h.sessionAccount[session.GetSid()]
 	if !ok {
-		resp := protocol.CharacterCreateResponse{
+		resp := protocol.PlayerCreateResponse{
 			Success:  false,
 			ErrorMsg: "请先登录账号",
 		}
@@ -214,16 +215,16 @@ func (h *PlayerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 		return session.Send(1003, respData)
 	}
 
-	var req protocol.CharacterCreateRequest
+	var req protocol.PlayerCreateRequest
 	if err := proto.Unmarshal(packet.Data, &req); err != nil {
-		zLog.Error("Failed to unmarshal character create request", zap.Error(err))
+		zLog.Error("Failed to unmarshal player create request", zap.Error(err))
 		return err
 	}
 
 	if req.Name == "" {
-		resp := protocol.CharacterCreateResponse{
+		resp := protocol.PlayerCreateResponse{
 			Success:  false,
-			ErrorMsg: "角色名称不能为空",
+			ErrorMsg: "玩家名称不能为空",
 		}
 		respData, _ := proto.Marshal(&resp)
 		return session.Send(1003, respData)
@@ -232,7 +233,7 @@ func (h *PlayerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 	accountObj, err := db.GetDBManager().AccountRepository.GetByName(account)
 	if err != nil || accountObj == nil {
 		zLog.Error("Failed to get account", zap.Error(err))
-		resp := protocol.CharacterCreateResponse{
+		resp := protocol.PlayerCreateResponse{
 			Success:  false,
 			ErrorMsg: "服务器错误",
 		}
@@ -254,8 +255,8 @@ func (h *PlayerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 
 	id, err := db.GetDBManager().CharacterRepository.Create(newCharacter)
 	if err != nil {
-		zLog.Error("Failed to create character", zap.Error(err))
-		resp := protocol.CharacterCreateResponse{
+		zLog.Error("Failed to create player", zap.Error(err))
+		resp := protocol.PlayerCreateResponse{
 			Success:  false,
 			ErrorMsg: "服务器错误",
 		}
@@ -264,7 +265,7 @@ func (h *PlayerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 	}
 
 	if id <= 0 {
-		resp := protocol.CharacterCreateResponse{
+		resp := protocol.PlayerCreateResponse{
 			Success:  false,
 			ErrorMsg: "服务器错误",
 		}
@@ -272,27 +273,27 @@ func (h *PlayerHandler) handleCharacterCreate(session *zNet.TcpServerSession, pa
 		return session.Send(1003, respData)
 	}
 
-	resp := protocol.CharacterCreateResponse{
+	resp := protocol.PlayerCreateResponse{
 		Success:  true,
 		ErrorMsg: "",
-		Character: &protocol.CharacterInfo{
-			CharacterId: newCharacter.CharID,
-			Name:        newCharacter.CharName,
-			Level:       int32(newCharacter.Level),
-			Sex:         int32(newCharacter.Sex),
-			Age:         int32(newCharacter.Age),
+		Player: &protocol.PlayerInfo{
+			PlayerId: newCharacter.CharID,
+			Name:     newCharacter.CharName,
+			Level:    int32(newCharacter.Level),
+			Sex:      int32(newCharacter.Sex),
+			Age:      int32(newCharacter.Age),
 		},
 	}
 	respData, _ := proto.Marshal(&resp)
 	return session.Send(1003, respData)
 }
 
-func (h *PlayerHandler) handleCharacterLogin(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
-	zLog.Debug("Received character login request", zap.Int64("sessionId", int64(session.GetSid())))
+func (h *PlayerHandler) handlePlayerLogin(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+	zLog.Debug("Received player login request", zap.Int64("sessionId", int64(session.GetSid())))
 
 	_, ok := h.sessionAccount[session.GetSid()]
 	if !ok {
-		resp := protocol.CharacterLoginResponse{
+		resp := protocol.PlayerLoginResponse{
 			Success:  false,
 			ErrorMsg: "请先登录账号",
 		}
@@ -300,27 +301,27 @@ func (h *PlayerHandler) handleCharacterLogin(session *zNet.TcpServerSession, pac
 		return session.Send(1004, respData)
 	}
 
-	var req protocol.CharacterLoginRequest
+	var req protocol.PlayerLoginRequest
 	if err := proto.Unmarshal(packet.Data, &req); err != nil {
-		zLog.Error("Failed to unmarshal character login request", zap.Error(err))
+		zLog.Error("Failed to unmarshal player login request", zap.Error(err))
 		return err
 	}
 
-	character, err := db.GetDBManager().CharacterRepository.GetByID(req.CharacterId)
+	character, err := db.GetDBManager().CharacterRepository.GetByID(req.PlayerId)
 	if err != nil || character == nil {
-		zLog.Error("Failed to get character", zap.Error(err))
-		resp := protocol.CharacterLoginResponse{
+		zLog.Error("Failed to get player", zap.Error(err))
+		resp := protocol.PlayerLoginResponse{
 			Success:  false,
-			ErrorMsg: "角色不存在",
+			ErrorMsg: "玩家不存在",
 		}
 		respData, _ := proto.Marshal(&resp)
 		return session.Send(1004, respData)
 	}
 
-	_, err = h.playerService.CreatePlayerActor(session, character.CharID, character.CharName)
+	_, err = h.playerService.CreatePlayerActor(session, common.PlayerIdType(character.CharID), character.CharName)
 	if err != nil {
 		zLog.Error("Failed to create player", zap.Error(err))
-		resp := protocol.CharacterLoginResponse{
+		resp := protocol.PlayerLoginResponse{
 			Success:  false,
 			ErrorMsg: "服务器错误",
 		}
@@ -328,10 +329,10 @@ func (h *PlayerHandler) handleCharacterLogin(session *zNet.TcpServerSession, pac
 		return session.Send(1004, respData)
 	}
 
-	h.charSession[req.CharacterId] = session.GetSid()
-	h.sessionChar[session.GetSid()] = req.CharacterId
+	h.playerSession[common.PlayerIdType(req.PlayerId)] = session.GetSid()
+	h.sessionPlayer[session.GetSid()] = common.PlayerIdType(req.PlayerId)
 
-	resp := protocol.CharacterLoginResponse{
+	resp := protocol.PlayerLoginResponse{
 		Success:  true,
 		ErrorMsg: "",
 		PlayerId: character.CharID,
@@ -343,32 +344,32 @@ func (h *PlayerHandler) handleCharacterLogin(session *zNet.TcpServerSession, pac
 	return session.Send(1004, respData)
 }
 
-func (h *PlayerHandler) handleCharacterLogout(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
-	zLog.Debug("Received character logout request", zap.Int64("sessionId", int64(session.GetSid())))
+func (h *PlayerHandler) handlePlayerLogout(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
+	zLog.Debug("Received player logout request", zap.Int64("sessionId", int64(session.GetSid())))
 
-	characterId, ok := h.sessionChar[session.GetSid()]
+	playerId, ok := h.sessionPlayer[session.GetSid()]
 	if !ok {
-		resp := protocol.CharacterLogoutResponse{
+		resp := protocol.PlayerLogoutResponse{
 			Success:  false,
-			ErrorMsg: "角色未登录",
+			ErrorMsg: "玩家未登录",
 		}
 		respData, _ := proto.Marshal(&resp)
 		return session.Send(1005, respData)
 	}
 
-	playerActor := h.playerService.GetPlayerActor(characterId)
+	playerActor := h.playerService.GetPlayerActor(common.PlayerIdType(playerId))
 	if playerActor != nil {
-		disconnectMsg := player.NewPlayerActorMessage(characterId, "disconnect", nil)
+		disconnectMsg := player.NewPlayerActorMessage(int64(playerId), "disconnect", nil)
 		playerActor.SendMessage(disconnectMsg)
 
-		h.playerService.RemovePlayer(characterId)
-		zLog.Info("Player logged out", zap.Int64("playerId", characterId), zap.String("name", playerActor.Player.GetName()))
+		h.playerService.RemovePlayer(common.PlayerIdType(playerId))
+		zLog.Info("Player logged out", zap.Int64("playerId", int64(playerId)), zap.String("name", playerActor.Player.GetName()))
 	}
 
-	delete(h.charSession, characterId)
-	delete(h.sessionChar, session.GetSid())
+	delete(h.playerSession, common.PlayerIdType(playerId))
+	delete(h.sessionPlayer, session.GetSid())
 
-	resp := protocol.CharacterLogoutResponse{
+	resp := protocol.PlayerLogoutResponse{
 		Success:  true,
 		ErrorMsg: "",
 	}
