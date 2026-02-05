@@ -106,9 +106,20 @@ func (h *PlayerHandler) handleAccountCreate(session *zNet.TcpServerSession, pack
 		return session.Send(1001, respData)
 	}
 
+	accountID, err := common.GenerateAccountID()
+	if err != nil {
+		zLog.Error("Failed to generate account ID", zap.Error(err))
+		resp := protocol.AccountCreateResponse{
+			Success:  false,
+			ErrorMsg: "服务器错误",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1001, respData)
+	}
+
 	now := time.Now()
 	newAccount := &models.Account{
-		AccountID:   time.Now().UnixNano() / 1000000,
+		AccountID:   int64(accountID),
 		AccountName: req.Account,
 		Password:    req.Password,
 		Status:      1,
@@ -241,9 +252,20 @@ func (h *PlayerHandler) handlePlayerCreate(session *zNet.TcpServerSession, packe
 		return session.Send(1003, respData)
 	}
 
+	charID, err := common.GenerateCharID()
+	if err != nil {
+		zLog.Error("Failed to generate character ID", zap.Error(err))
+		resp := protocol.PlayerCreateResponse{
+			Success:  false,
+			ErrorMsg: "服务器错误",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1003, respData)
+	}
+
 	now := time.Now()
 	newCharacter := &models.Character{
-		CharID:    time.Now().UnixNano() / 1000000,
+		CharID:    int64(charID),
 		AccountID: accountObj.AccountID,
 		CharName:  req.Name,
 		Sex:       int(req.Sex),

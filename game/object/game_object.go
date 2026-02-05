@@ -26,7 +26,7 @@ type GameObject struct {
 }
 
 // NewGameObject 创建新的游戏对象
-func NewGameObject(id uint64, name string) *GameObject {
+func NewGameObject(id common.ObjectIdType, name string) *GameObject {
 	goObj := &GameObject{
 		BaseObject:   &zObject.BaseObject{},
 		name:         name,
@@ -41,7 +41,7 @@ func NewGameObject(id uint64, name string) *GameObject {
 }
 
 // NewGameObjectWithType 创建指定类型的游戏对象
-func NewGameObjectWithType(id uint64, name string, objectType GameObjectType) *GameObject {
+func NewGameObjectWithType(id common.ObjectIdType, name string, objectType GameObjectType) *GameObject {
 	goObj := &GameObject{
 		BaseObject:   &zObject.BaseObject{},
 		name:         name,
@@ -56,14 +56,14 @@ func NewGameObjectWithType(id uint64, name string, objectType GameObjectType) *G
 }
 
 // GetID 获取对象ID
-func (goObj *GameObject) GetID() uint64 {
+func (goObj *GameObject) GetID() common.ObjectIdType {
 	goObj.mu.RLock()
 	defer goObj.mu.RUnlock()
-	return goObj.GetId().(uint64)
+	return goObj.GetId().(common.ObjectIdType)
 }
 
 // SetID 设置对象ID
-func (goObj *GameObject) SetID(id uint64) {
+func (goObj *GameObject) SetID(id common.ObjectIdType) {
 	goObj.mu.Lock()
 	defer goObj.mu.Unlock()
 	goObj.SetId(id)
@@ -84,10 +84,10 @@ func (goObj *GameObject) SetName(name string) {
 }
 
 // GetType 获取对象类型
-func (goObj *GameObject) GetType() int {
+func (goObj *GameObject) GetType() GameObjectType {
 	goObj.mu.RLock()
 	defer goObj.mu.RUnlock()
-	return int(goObj.objectType)
+	return goObj.objectType
 }
 
 // SetType 设置对象类型

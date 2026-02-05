@@ -130,8 +130,11 @@ func (svs *SkillVisualSystem) PlaySkillVisual(ownerID uint64, skillID int32, pos
 // playVisual 播放特效
 func (svs *SkillVisualSystem) playVisual(ownerID uint64, visual *SkillVisual, position common.Vector3, targetID uint64) uint64 {
 	activeVisual := svs.activePool.Get().(*ActiveVisual)
-	visualID := uint64(time.Now().UnixNano())
-	activeVisual.VisualID = visualID
+	visualID, err := common.GenerateVisualID()
+	if err != nil {
+		return 0
+	}
+	activeVisual.VisualID = uint64(visualID)
 	activeVisual.Visual = visual
 	activeVisual.OwnerID = ownerID
 	activeVisual.Position = position
@@ -140,8 +143,8 @@ func (svs *SkillVisualSystem) playVisual(ownerID uint64, visual *SkillVisual, po
 	activeVisual.EndTime = activeVisual.StartTime.Add(time.Duration(visual.Duration * float32(time.Second)))
 	activeVisual.Progress = 0
 
-	svs.activeVisuals[visualID] = activeVisual
-	return visualID
+	svs.activeVisuals[uint64(visualID)] = activeVisual
+	return uint64(visualID)
 }
 
 // Update 更新技能特效系统

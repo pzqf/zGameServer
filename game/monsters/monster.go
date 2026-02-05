@@ -182,7 +182,7 @@ func (dc *DropConfig) SetGold(gold int32) {
 }
 
 // NewMonster 创建新的怪物对象
-func NewMonster(id uint64, name string) *Monster {
+func NewMonster(id common.ObjectIdType, name string) *Monster {
 	// 创建基础生命对象
 	livingObj := object.NewLivingObject(id, name)
 

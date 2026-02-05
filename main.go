@@ -12,6 +12,7 @@ import (
 	"github.com/pzqf/zGameServer/config/tables"
 	"github.com/pzqf/zGameServer/db"
 	"github.com/pzqf/zGameServer/game/auction"
+	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/guild"
 	"github.com/pzqf/zGameServer/game/maps"
 	"github.com/pzqf/zGameServer/game/player"
@@ -38,6 +39,13 @@ func main() {
 	if err := config.InitConfig("config.ini"); err != nil {
 		return
 	}
+
+	serverCfg := config.GetServerConfig()
+	if err := common.InitIDGenerator(serverCfg.WorkerID, serverCfg.DatacenterID); err != nil {
+		fmt.Println("Failed to initialize ID generator:", err)
+		return
+	}
+
 	if err := zLog.InitLogger(config.GetLogConfig()); err != nil {
 		zLog.Fatal("Failed to initialize logger", zap.Error(err))
 	}

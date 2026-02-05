@@ -69,6 +69,8 @@ type ServerConfig struct {
 	ServerID          int32  // 服务器ID
 	ServerName        string // 服务器名称
 	HeartbeatDuration int    // 心跳时长（秒），0表示禁用心跳
+	WorkerID          int64  // Snowflake工作机器ID
+	DatacenterID      int64  // Snowflake数据中心ID
 }
 
 // DBConfig 数据库配置
@@ -207,6 +209,8 @@ func LoadConfig(filePath string) (*Config, error) {
 		ServerID:          int32(getConfigInt(zcfg, "server.server_id", 1)),
 		ServerName:        getConfigString(zcfg, "server.server_name", "GameServer"),
 		HeartbeatDuration: getConfigInt(zcfg, "server.heartbeat_duration", 0),
+		WorkerID:          int64(getConfigInt(zcfg, "server.worker_id", 1)),
+		DatacenterID:      int64(getConfigInt(zcfg, "server.datacenter_id", 1)),
 	}
 
 	// 解析防DDoS攻击配置

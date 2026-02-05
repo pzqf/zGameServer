@@ -29,11 +29,11 @@ type IComponent interface {
 // IGameObject 所有游戏对象的最基本行为接口
 type IGameObject interface {
 	// 获取唯一标识
-	GetID() uint64
+	GetID() ObjectIdType
 	// 获取名称
 	GetName() string
 	// 获取对象类型
-	GetType() int
+	GetType() GameObjectType
 	// 获取位置信息
 	GetPosition() Vector3
 	// 设置位置
@@ -63,7 +63,7 @@ type IGameObject interface {
 // IMap 地图接口
 type IMap interface {
 	// 获取地图ID
-	GetID() uint64
+	GetID() MapIdType
 	// 获取地图名称
 	GetName() string
 	// 获取指定范围内的对象
@@ -71,7 +71,7 @@ type IMap interface {
 	// 添加对象
 	AddObject(object IGameObject)
 	// 移除对象
-	RemoveObject(objectID uint64)
+	RemoveObject(objectID ObjectIdType)
 	// 移动对象
 	MoveObject(object IGameObject, targetPos Vector3) error
 	// 传送对象

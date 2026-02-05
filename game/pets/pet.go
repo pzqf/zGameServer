@@ -147,7 +147,7 @@ type Pet struct {
 }
 
 // NewPet 创建新的宠物对象
-func NewPet(id uint64, name string) *Pet {
+func NewPet(id common.ObjectIdType, name string) *Pet {
 	// 创建基础生命对象
 	livingObj := object.NewLivingObject(id, name)
 

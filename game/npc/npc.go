@@ -210,7 +210,7 @@ func (dt *DialogueTree) SetActive(active bool) {
 }
 
 // NewNPC 创建新的NPC对象
-func NewNPC(id uint64, name string, npcType int) *NPC {
+func NewNPC(id common.ObjectIdType, name string, npcType int) *NPC {
 	// 创建基础生命对象
 	livingObj := object.NewLivingObject(id, name)
 

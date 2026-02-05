@@ -3,10 +3,10 @@ package dao
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/models"
+	"github.com/pzqf/zGameServer/game/common"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -96,8 +96,14 @@ func (dao *LoginLogDAO) GetLoginLogByCharID(charID int64, callback func(*models.
 
 // CreateLoginLog 创建角色登录/登出日志
 func (dao *LoginLogDAO) CreateLoginLog(loginLog *models.LoginLog, callback func(int64, error)) {
-	// 生成唯一的log_id
-	loginLog.LogID = time.Now().UnixNano() / 1000000
+	logID, err := common.GenerateLogID()
+	if err != nil {
+		if callback != nil {
+			callback(0, err)
+		}
+		return
+	}
+	loginLog.LogID = int64(logID)
 
 	// 根据数据库驱动类型执行不同的插入操作
 	if dao.connector.GetDriver() == "mongo" {

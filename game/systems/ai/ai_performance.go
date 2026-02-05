@@ -255,9 +255,12 @@ func (apm *AIPerformanceManager) CreateGroupAI(members []uint64) uint64 {
 	apm.mu.Lock()
 	defer apm.mu.Unlock()
 
-	groupID := uint64(time.Now().UnixNano())
+	groupID, err := common.GenerateGroupID()
+	if err != nil {
+		return 0
+	}
 	groupAI := apm.groupAIPool.Get().(*GroupAI)
-	groupAI.GroupID = groupID
+	groupAI.GroupID = uint64(groupID)
 	groupAI.Members = make(map[uint64]bool)
 	groupAI.LastAction = time.Now()
 	groupAI.Behavior = "normal"
@@ -270,8 +273,8 @@ func (apm *AIPerformanceManager) CreateGroupAI(members []uint64) uint64 {
 		groupAI.LeaderID = members[0]
 	}
 
-	apm.groupAIs[groupID] = groupAI
-	return groupID
+	apm.groupAIs[uint64(groupID)] = groupAI
+	return uint64(groupID)
 }
 
 // AddToGroup 添加到群体

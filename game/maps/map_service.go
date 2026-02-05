@@ -81,8 +81,12 @@ func (ms *MapService) Serve() {
 func (ms *MapService) LoadMap(filePath string) error {
 	// 创建地图对象（这里需要从文件加载地图配置，暂时使用默认值）
 	// 实际项目中应该从文件加载地图配置
-	mapID := uint64(time.Now().UnixNano())
-	mapName := filePath // 暂时使用文件路径作为地图名称
+	mapID, err := common.GenerateMapID()
+	if err != nil {
+		zLog.Error("Failed to generate map ID", zap.Error(err))
+		return err
+	}
+	mapName := filePath
 	width := float32(1000)
 	height := float32(1000)
 
@@ -90,7 +94,7 @@ func (ms *MapService) LoadMap(filePath string) error {
 
 	// 存储地图
 	mapId := mapObj.GetID()
-	ms.maps.Store(common.MapIdType(mapId), mapObj)
+	ms.maps.Store(mapId, mapObj)
 
 	zLog.Info("Map loaded successfully", zap.Any("mapId", mapId), zap.String("mapName", mapObj.GetName()), zap.String("file_path", filePath))
 	return nil
@@ -157,7 +161,7 @@ func (ms *MapService) AddGameObject(obj common.IGameObject, mapId common.MapIdTy
 	ms.objectMap.Store(objectId, mapId)
 	zLog.Debug("Added game object",
 		zap.Int64("objectId", int64(objectId)),
-		zap.Int("objectType", obj.GetType()),
+		zap.Int("objectType", int(obj.GetType())),
 		zap.Int64("mapId", int64(mapId)))
 }
 
@@ -182,7 +186,7 @@ func (ms *MapService) GetGameObject(objectId common.ObjectIdType) common.IGameOb
 // GetGameObjectsByType 根据对象类型获取游戏对象列表
 // objectType: 对象类型
 // 返回指定类型的游戏对象列表
-func (ms *MapService) GetGameObjectsByType(objectType int) []common.IGameObject {
+func (ms *MapService) GetGameObjectsByType(objectType common.GameObjectType) []common.IGameObject {
 	var objects []common.IGameObject
 	ms.gameObjects.Range(func(key common.ObjectIdType, value common.IGameObject) bool {
 		obj := value

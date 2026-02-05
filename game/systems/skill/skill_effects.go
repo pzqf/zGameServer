@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zObject"
+	"github.com/pzqf/zGameServer/game/common"
 )
 
 // SkillEffectType 技能效果类型
@@ -193,8 +194,11 @@ func (ses *SkillEffectSystem) StartCombo(ownerID uint64, skillIDs []int32) uint6
 	defer ses.mu.Unlock()
 
 	combo := ses.comboPool.Get().(*SkillCombo)
-	comboID := uint64(time.Now().UnixNano())
-	combo.ComboID = comboID
+	comboID, err := common.GenerateComboID()
+	if err != nil {
+		return 0
+	}
+	combo.ComboID = uint64(comboID)
 	combo.OwnerID = ownerID
 	combo.SkillIDs = skillIDs
 	combo.CurrentStep = 0
@@ -202,8 +206,8 @@ func (ses *SkillEffectSystem) StartCombo(ownerID uint64, skillIDs []int32) uint6
 	combo.ExpiryTime = time.Now().Add(5 * time.Second) // 5秒过期
 	combo.Bonus = 1.0
 
-	ses.combos[comboID] = combo
-	return comboID
+	ses.combos[uint64(comboID)] = combo
+	return uint64(comboID)
 }
 
 // ContinueCombo 继续连击

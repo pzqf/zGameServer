@@ -32,7 +32,7 @@ type LivingObject struct {
 	lastAttack time.Time
 }
 
-func NewLivingObject(id uint64, name string) *LivingObject {
+func NewLivingObject(id common.ObjectIdType, name string) *LivingObject {
 	goObj := NewGameObject(id, name)
 	goObj.SetType(common.GameObjectTypeLiving)
 

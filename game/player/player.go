@@ -29,7 +29,7 @@ type Player struct {
 
 // NewPlayer 创建新玩家对象
 func NewPlayer(playerId common.PlayerIdType, name string, session *zNet.TcpServerSession) *Player {
-	livingObj := object.NewLivingObject(uint64(playerId), name)
+	livingObj := object.NewLivingObject(common.ObjectIdType(playerId), name)
 	livingObj.SetType(common.GameObjectTypePlayer)
 
 	player := &Player{
