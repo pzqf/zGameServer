@@ -245,6 +245,9 @@ func LoadConfig(filePath string) (*Config, error) {
 		Sampling:           getConfigBool(zcfg, "log.sampling", true),
 		SamplingInitial:    getConfigInt(zcfg, "log.sampling-initial", 100),
 		SamplingThereafter: getConfigInt(zcfg, "log.sampling-thereafter", 10),
+		Async:              getConfigBool(zcfg, "log.async", false),
+		AsyncBufferSize:    getConfigInt(zcfg, "log.async-buffer-size", 1024),
+		AsyncFlushInterval: getConfigInt(zcfg, "log.async-flush-interval", 100),
 	}
 
 	// 解析HTTP服务启用状态
