@@ -34,16 +34,15 @@ func NewPlayerActorLoginMessage(actorID int64, account *models.Account) *PlayerA
 	}
 }
 
-// PlayerActorCharacterSelectMessage 角色选择消息
-type PlayerActorCharacterSelectMessage struct {
+type PlayerActorPlayerSelectMessage struct {
 	zActor.BaseActorMessage
-	Character *models.Character
+	Player *models.Player
 }
 
-func NewPlayerActorCharacterSelectMessage(actorID int64, character *models.Character) *PlayerActorCharacterSelectMessage {
-	return &PlayerActorCharacterSelectMessage{
+func NewPlayerActorPlayerSelectMessage(actorID int64, player *models.Player) *PlayerActorPlayerSelectMessage {
+	return &PlayerActorPlayerSelectMessage{
 		BaseActorMessage: zActor.BaseActorMessage{ActorID: actorID},
-		Character:        character,
+		Player:           player,
 	}
 }
 

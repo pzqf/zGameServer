@@ -4,19 +4,20 @@ import (
 	"sync"
 
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 	"go.uber.org/zap"
 )
 
 // ObjectManager 对象管理器
 type ObjectManager struct {
 	mu         sync.RWMutex
-	allObjects map[common.ObjectIdType]common.IGameObject
-	players    map[common.ObjectIdType]common.IGameObject
-	monsters   map[common.ObjectIdType]common.IGameObject
-	npcs       map[common.ObjectIdType]common.IGameObject
-	items      map[common.ObjectIdType]common.IGameObject
-	buildings  map[common.ObjectIdType]common.IGameObject
+	allObjects map[common.ObjectIdType]gamecommon.IGameObject
+	players    map[common.ObjectIdType]gamecommon.IGameObject
+	monsters   map[common.ObjectIdType]gamecommon.IGameObject
+	npcs       map[common.ObjectIdType]gamecommon.IGameObject
+	items      map[common.ObjectIdType]gamecommon.IGameObject
+	buildings  map[common.ObjectIdType]gamecommon.IGameObject
 }
 
 // objectManagerInstance 全局实例
@@ -25,12 +26,12 @@ var objectManagerInstance *ObjectManager
 // InitObjectManager 初始化对象管理器
 func InitObjectManager() {
 	objectManagerInstance = &ObjectManager{
-		allObjects: make(map[common.ObjectIdType]common.IGameObject),
-		players:    make(map[common.ObjectIdType]common.IGameObject),
-		monsters:   make(map[common.ObjectIdType]common.IGameObject),
-		npcs:       make(map[common.ObjectIdType]common.IGameObject),
-		items:      make(map[common.ObjectIdType]common.IGameObject),
-		buildings:  make(map[common.ObjectIdType]common.IGameObject),
+		allObjects: make(map[common.ObjectIdType]gamecommon.IGameObject),
+		players:    make(map[common.ObjectIdType]gamecommon.IGameObject),
+		monsters:   make(map[common.ObjectIdType]gamecommon.IGameObject),
+		npcs:       make(map[common.ObjectIdType]gamecommon.IGameObject),
+		items:      make(map[common.ObjectIdType]gamecommon.IGameObject),
+		buildings:  make(map[common.ObjectIdType]gamecommon.IGameObject),
 	}
 }
 
@@ -40,7 +41,7 @@ func GetObjectManager() *ObjectManager {
 }
 
 // AddObject 添加对象到管理器
-func (om *ObjectManager) AddObject(object common.IGameObject) {
+func (om *ObjectManager) AddObject(object gamecommon.IGameObject) {
 	if object == nil {
 		return
 	}
@@ -53,15 +54,15 @@ func (om *ObjectManager) AddObject(object common.IGameObject) {
 
 	objType := object.GetType()
 
-	if objType == common.GameObjectTypePlayer {
+	if objType == gamecommon.GameObjectTypePlayer {
 		om.players[objectID] = object
-	} else if objType == common.GameObjectTypeMonster {
+	} else if objType == gamecommon.GameObjectTypeMonster {
 		om.monsters[objectID] = object
-	} else if objType == common.GameObjectTypeNPC {
+	} else if objType == gamecommon.GameObjectTypeNPC {
 		om.npcs[objectID] = object
-	} else if objType == common.GameObjectTypeItem {
+	} else if objType == gamecommon.GameObjectTypeItem {
 		om.items[objectID] = object
-	} else if objType == common.GameObjectTypeBuilding {
+	} else if objType == gamecommon.GameObjectTypeBuilding {
 		om.buildings[objectID] = object
 	}
 }
@@ -79,15 +80,15 @@ func (om *ObjectManager) RemoveObject(objectID common.ObjectIdType) {
 	delete(om.allObjects, objectID)
 
 	objType := obj.GetType()
-	if objType == common.GameObjectTypePlayer {
+	if objType == gamecommon.GameObjectTypePlayer {
 		delete(om.players, objectID)
-	} else if objType == common.GameObjectTypeMonster {
+	} else if objType == gamecommon.GameObjectTypeMonster {
 		delete(om.monsters, objectID)
-	} else if objType == common.GameObjectTypeNPC {
+	} else if objType == gamecommon.GameObjectTypeNPC {
 		delete(om.npcs, objectID)
-	} else if objType == common.GameObjectTypeItem {
+	} else if objType == gamecommon.GameObjectTypeItem {
 		delete(om.items, objectID)
-	} else if objType == common.GameObjectTypeBuilding {
+	} else if objType == gamecommon.GameObjectTypeBuilding {
 		delete(om.buildings, objectID)
 	}
 
@@ -95,7 +96,7 @@ func (om *ObjectManager) RemoveObject(objectID common.ObjectIdType) {
 }
 
 // GetObject 获取对象
-func (om *ObjectManager) GetObject(objectID common.ObjectIdType) common.IGameObject {
+func (om *ObjectManager) GetObject(objectID common.ObjectIdType) gamecommon.IGameObject {
 	om.mu.RLock()
 	defer om.mu.RUnlock()
 
@@ -103,11 +104,11 @@ func (om *ObjectManager) GetObject(objectID common.ObjectIdType) common.IGameObj
 }
 
 // GetAllObjects 获取所有对象
-func (om *ObjectManager) GetAllObjects() []common.IGameObject {
+func (om *ObjectManager) GetAllObjects() []gamecommon.IGameObject {
 	om.mu.RLock()
 	defer om.mu.RUnlock()
 
-	objects := make([]common.IGameObject, 0, len(om.allObjects))
+	objects := make([]gamecommon.IGameObject, 0, len(om.allObjects))
 	for _, obj := range om.allObjects {
 		objects = append(objects, obj)
 	}
@@ -116,27 +117,27 @@ func (om *ObjectManager) GetAllObjects() []common.IGameObject {
 }
 
 // GetObjectsByType 根据类型获取对象
-func (om *ObjectManager) GetObjectsByType(objType common.GameObjectType) []common.IGameObject {
+func (om *ObjectManager) GetObjectsByType(objType gamecommon.GameObjectType) []gamecommon.IGameObject {
 	om.mu.RLock()
 	defer om.mu.RUnlock()
 
-	var targetMap map[common.ObjectIdType]common.IGameObject
+	var targetMap map[common.ObjectIdType]gamecommon.IGameObject
 	switch objType {
-	case common.GameObjectTypePlayer:
+	case gamecommon.GameObjectTypePlayer:
 		targetMap = om.players
-	case common.GameObjectTypeMonster:
+	case gamecommon.GameObjectTypeMonster:
 		targetMap = om.monsters
-	case common.GameObjectTypeNPC:
+	case gamecommon.GameObjectTypeNPC:
 		targetMap = om.npcs
-	case common.GameObjectTypeItem:
+	case gamecommon.GameObjectTypeItem:
 		targetMap = om.items
-	case common.GameObjectTypeBuilding:
+	case gamecommon.GameObjectTypeBuilding:
 		targetMap = om.buildings
 	default:
 		return nil
 	}
 
-	objects := make([]common.IGameObject, 0, len(targetMap))
+	objects := make([]gamecommon.IGameObject, 0, len(targetMap))
 	for _, obj := range targetMap {
 		objects = append(objects, obj)
 	}
@@ -149,12 +150,12 @@ func (om *ObjectManager) ClearAllObjects() {
 	om.mu.Lock()
 	defer om.mu.Unlock()
 
-	om.allObjects = make(map[common.ObjectIdType]common.IGameObject)
-	om.players = make(map[common.ObjectIdType]common.IGameObject)
-	om.monsters = make(map[common.ObjectIdType]common.IGameObject)
-	om.npcs = make(map[common.ObjectIdType]common.IGameObject)
-	om.items = make(map[common.ObjectIdType]common.IGameObject)
-	om.buildings = make(map[common.ObjectIdType]common.IGameObject)
+	om.allObjects = make(map[common.ObjectIdType]gamecommon.IGameObject)
+	om.players = make(map[common.ObjectIdType]gamecommon.IGameObject)
+	om.monsters = make(map[common.ObjectIdType]gamecommon.IGameObject)
+	om.npcs = make(map[common.ObjectIdType]gamecommon.IGameObject)
+	om.items = make(map[common.ObjectIdType]gamecommon.IGameObject)
+	om.buildings = make(map[common.ObjectIdType]gamecommon.IGameObject)
 
 	zLog.Info("All objects cleared from manager")
 }

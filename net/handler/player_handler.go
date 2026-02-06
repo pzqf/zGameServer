@@ -5,9 +5,9 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
+	"github.com/pzqf/zGameServer/common"
 	"github.com/pzqf/zGameServer/db"
 	"github.com/pzqf/zGameServer/db/models"
-	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/player"
 	"github.com/pzqf/zGameServer/net/protocol"
 	"github.com/pzqf/zGameServer/net/router"
@@ -86,7 +86,7 @@ func (h *PlayerHandler) handleAccountCreate(session *zNet.TcpServerSession, pack
 		return session.Send(1001, respData)
 	}
 
-	account, err := db.GetDBManager().AccountRepository.GetByName(req.Account)
+	account, err := db.GetMgr().AccountRepository.GetByName(req.Account)
 	if err != nil {
 		zLog.Error("Failed to check account existence", zap.Error(err))
 		resp := protocol.AccountCreateResponse{
@@ -127,7 +127,7 @@ func (h *PlayerHandler) handleAccountCreate(session *zNet.TcpServerSession, pack
 		LastLoginAt: now,
 	}
 
-	id, err := db.GetDBManager().AccountRepository.Create(newAccount)
+	id, err := db.GetMgr().AccountRepository.Create(newAccount)
 	if err != nil {
 		zLog.Error("Failed to create account", zap.Error(err))
 		resp := protocol.AccountCreateResponse{
@@ -173,7 +173,7 @@ func (h *PlayerHandler) handleAccountLogin(session *zNet.TcpServerSession, packe
 		return session.Send(1002, respData)
 	}
 
-	account, err := db.GetDBManager().AccountRepository.GetByName(req.Account)
+	account, err := db.GetMgr().AccountRepository.GetByName(req.Account)
 	if err != nil {
 		zLog.Error("Failed to get account", zap.Error(err))
 		resp := protocol.AccountLoginResponse{
@@ -194,7 +194,7 @@ func (h *PlayerHandler) handleAccountLogin(session *zNet.TcpServerSession, packe
 	}
 
 	account.LastLoginAt = time.Now()
-	_, err = db.GetDBManager().AccountRepository.Update(account)
+	_, err = db.GetMgr().AccountRepository.Update(account)
 	if err != nil {
 		zLog.Error("Failed to update last login time", zap.Error(err))
 	}
@@ -241,7 +241,7 @@ func (h *PlayerHandler) handlePlayerCreate(session *zNet.TcpServerSession, packe
 		return session.Send(1003, respData)
 	}
 
-	accountObj, err := db.GetDBManager().AccountRepository.GetByName(account)
+	accountObj, err := db.GetMgr().AccountRepository.GetByName(account)
 	if err != nil || accountObj == nil {
 		zLog.Error("Failed to get account", zap.Error(err))
 		resp := protocol.PlayerCreateResponse{
@@ -252,9 +252,9 @@ func (h *PlayerHandler) handlePlayerCreate(session *zNet.TcpServerSession, packe
 		return session.Send(1003, respData)
 	}
 
-	charID, err := common.GenerateCharID()
+	playerID, err := common.GeneratePlayerID()
 	if err != nil {
-		zLog.Error("Failed to generate character ID", zap.Error(err))
+		zLog.Error("Failed to generate player ID", zap.Error(err))
 		resp := protocol.PlayerCreateResponse{
 			Success:  false,
 			ErrorMsg: "服务器错误",
@@ -264,18 +264,18 @@ func (h *PlayerHandler) handlePlayerCreate(session *zNet.TcpServerSession, packe
 	}
 
 	now := time.Now()
-	newCharacter := &models.Character{
-		CharID:    int64(charID),
-		AccountID: accountObj.AccountID,
-		CharName:  req.Name,
-		Sex:       int(req.Sex),
-		Age:       int(req.Age),
-		Level:     1,
-		CreatedAt: now,
-		UpdatedAt: now,
+	newPlayer := &models.Player{
+		PlayerID:   int64(playerID),
+		AccountID:  accountObj.AccountID,
+		PlayerName: req.Name,
+		Sex:        int(req.Sex),
+		Age:        int(req.Age),
+		Level:      1,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
-	id, err := db.GetDBManager().CharacterRepository.Create(newCharacter)
+	id, err := db.GetMgr().PlayerRepository.Create(newPlayer)
 	if err != nil {
 		zLog.Error("Failed to create player", zap.Error(err))
 		resp := protocol.PlayerCreateResponse{
@@ -299,11 +299,11 @@ func (h *PlayerHandler) handlePlayerCreate(session *zNet.TcpServerSession, packe
 		Success:  true,
 		ErrorMsg: "",
 		Player: &protocol.PlayerInfo{
-			PlayerId: newCharacter.CharID,
-			Name:     newCharacter.CharName,
-			Level:    int32(newCharacter.Level),
-			Sex:      int32(newCharacter.Sex),
-			Age:      int32(newCharacter.Age),
+			PlayerId: newPlayer.PlayerID,
+			Name:     newPlayer.PlayerName,
+			Level:    int32(newPlayer.Level),
+			Sex:      int32(newPlayer.Sex),
+			Age:      int32(newPlayer.Age),
 		},
 	}
 	respData, _ := proto.Marshal(&resp)
@@ -329,8 +329,8 @@ func (h *PlayerHandler) handlePlayerLogin(session *zNet.TcpServerSession, packet
 		return err
 	}
 
-	character, err := db.GetDBManager().CharacterRepository.GetByID(req.PlayerId)
-	if err != nil || character == nil {
+	pl, err := db.GetMgr().PlayerRepository.GetByID(req.PlayerId)
+	if err != nil || pl == nil {
 		zLog.Error("Failed to get player", zap.Error(err))
 		resp := protocol.PlayerLoginResponse{
 			Success:  false,
@@ -340,7 +340,7 @@ func (h *PlayerHandler) handlePlayerLogin(session *zNet.TcpServerSession, packet
 		return session.Send(1004, respData)
 	}
 
-	_, err = h.playerService.CreatePlayerActor(session, common.PlayerIdType(character.CharID), character.CharName)
+	_, err = h.playerService.CreatePlayerActor(session, common.PlayerIdType(pl.PlayerID), pl.PlayerName)
 	if err != nil {
 		zLog.Error("Failed to create player", zap.Error(err))
 		resp := protocol.PlayerLoginResponse{
@@ -357,9 +357,9 @@ func (h *PlayerHandler) handlePlayerLogin(session *zNet.TcpServerSession, packet
 	resp := protocol.PlayerLoginResponse{
 		Success:  true,
 		ErrorMsg: "",
-		PlayerId: character.CharID,
-		Name:     character.CharName,
-		Level:    int32(character.Level),
+		PlayerId: pl.PlayerID,
+		Name:     pl.PlayerName,
+		Level:    int32(pl.Level),
 		Gold:     1000,
 	}
 	respData, _ := proto.Marshal(&resp)

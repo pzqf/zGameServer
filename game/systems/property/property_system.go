@@ -7,27 +7,27 @@ import (
 )
 
 // PropertyListener 属性变化监听器
-type PropertyListener func(owner common.IGameObject, key string, oldValue, newValue float32)
+type PropertyListener func(owner common.IGameObject, key string, oldValue, newValue float64)
 
 // PropertyState 属性状态
 type PropertyState struct {
 	mu         sync.RWMutex
-	properties map[string]float32
+	properties map[string]float64
 }
 
 func NewPropertyState() *PropertyState {
 	return &PropertyState{
-		properties: make(map[string]float32),
+		properties: make(map[string]float64),
 	}
 }
 
-func (state *PropertyState) GetProperty(key string) float32 {
+func (state *PropertyState) GetProperty(key string) float64 {
 	state.mu.RLock()
 	defer state.mu.RUnlock()
 	return state.properties[key]
 }
 
-func (state *PropertyState) SetProperty(key string, value float32) float32 {
+func (state *PropertyState) SetProperty(key string, value float64) float64 {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	oldValue := state.properties[key]
@@ -35,24 +35,24 @@ func (state *PropertyState) SetProperty(key string, value float32) float32 {
 	return oldValue
 }
 
-func (state *PropertyState) AddProperty(key string, value float32) {
+func (state *PropertyState) AddProperty(key string, value float64) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	current := state.properties[key]
 	state.properties[key] = current + value
 }
 
-func (state *PropertyState) SubProperty(key string, value float32) {
+func (state *PropertyState) SubProperty(key string, value float64) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	current := state.properties[key]
 	state.properties[key] = current - value
 }
 
-func (state *PropertyState) GetAllProperties() map[string]float32 {
+func (state *PropertyState) GetAllProperties() map[string]float64 {
 	state.mu.RLock()
 	defer state.mu.RUnlock()
-	result := make(map[string]float32, len(state.properties))
+	result := make(map[string]float64, len(state.properties))
 	for k, v := range state.properties {
 		result[k] = v
 	}
@@ -75,42 +75,42 @@ func NewPropertyComponent(owner common.IGameObject) *PropertyComponent {
 	}
 }
 
-func (pc *PropertyComponent) GetProperty(key string) float32 {
+func (pc *PropertyComponent) GetProperty(key string) float64 {
 	return pc.propertyState.GetProperty(key)
 }
 
-func (pc *PropertyComponent) GetPropertyByType(propType PropertyType) float32 {
+func (pc *PropertyComponent) GetPropertyByType(propType PropertyType) float64 {
 	return pc.GetProperty(GetPropertyType(propType))
 }
 
-func (pc *PropertyComponent) SetProperty(key string, value float32) {
+func (pc *PropertyComponent) SetProperty(key string, value float64) {
 	oldValue := pc.propertyState.SetProperty(key, value)
 	pc.triggerPropertyChange(key, oldValue, value)
 }
 
-func (pc *PropertyComponent) SetPropertyByType(propType PropertyType, value float32) {
+func (pc *PropertyComponent) SetPropertyByType(propType PropertyType, value float64) {
 	pc.SetProperty(GetPropertyType(propType), value)
 }
 
-func (pc *PropertyComponent) AddProperty(key string, value float32) {
+func (pc *PropertyComponent) AddProperty(key string, value float64) {
 	current := pc.GetProperty(key)
 	pc.SetProperty(key, current+value)
 }
 
-func (pc *PropertyComponent) AddPropertyByType(propType PropertyType, value float32) {
+func (pc *PropertyComponent) AddPropertyByType(propType PropertyType, value float64) {
 	pc.AddProperty(GetPropertyType(propType), value)
 }
 
-func (pc *PropertyComponent) SubProperty(key string, value float32) {
+func (pc *PropertyComponent) SubProperty(key string, value float64) {
 	current := pc.GetProperty(key)
 	pc.SetProperty(key, current-value)
 }
 
-func (pc *PropertyComponent) SubPropertyByType(propType PropertyType, value float32) {
+func (pc *PropertyComponent) SubPropertyByType(propType PropertyType, value float64) {
 	pc.SubProperty(GetPropertyType(propType), value)
 }
 
-func (pc *PropertyComponent) GetAllProperties() map[string]float32 {
+func (pc *PropertyComponent) GetAllProperties() map[string]float64 {
 	return pc.propertyState.GetAllProperties()
 }
 
@@ -138,7 +138,7 @@ func (pc *PropertyComponent) Update(deltaTime float64) {
 	// 属性组件不需要定期更新
 }
 
-func (pc *PropertyComponent) triggerPropertyChange(key string, oldValue, newValue float32) {
+func (pc *PropertyComponent) triggerPropertyChange(key string, oldValue, newValue float64) {
 	if oldValue == newValue {
 		return
 	}

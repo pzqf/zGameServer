@@ -37,6 +37,9 @@ const (
 	// 其他属性
 	PropertyCooldownReduction PropertyType = "cooldown_reduction" // 冷却缩减
 	PropertyRangeBonus        PropertyType = "range_bonus"        // 范围加成
+	PropertyExp               PropertyType = "exp"                // 经验值
+	PropertyMoveSpeed         PropertyType = "move_speed"         // 移动速度
+	PropertyAttackRange       PropertyType = "attack_range"       // 攻击范围
 )
 
 // GetPropertyType 获取属性类型字符串
@@ -66,5 +69,8 @@ func GetAllPropertyTypes() []PropertyType {
 		PropertyManaEfficiency,
 		PropertyCooldownReduction,
 		PropertyRangeBonus,
+		PropertyExp,
+		PropertyMoveSpeed,
+		PropertyAttackRange,
 	}
 }

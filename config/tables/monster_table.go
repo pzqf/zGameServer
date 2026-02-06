@@ -1,18 +1,17 @@
 package tables
 
 import (
-	"sync"
-
 	"github.com/pzqf/zGameServer/config/models"
 )
 
 // MonsterTableLoader 怪物表加载器
+// 负责从Excel加载怪物配置数据
 type MonsterTableLoader struct {
-	mu       sync.RWMutex
-	monsters map[int32]*models.Monster
+	monsters map[int32]*models.Monster // 怪物配置映射（怪物ID -> 配置）
 }
 
 // NewMonsterTableLoader 创建怪物表加载器
+// 返回: 初始化后的怪物表加载器实例
 func NewMonsterTableLoader() *MonsterTableLoader {
 	return &MonsterTableLoader{
 		monsters: make(map[int32]*models.Monster),
@@ -20,6 +19,11 @@ func NewMonsterTableLoader() *MonsterTableLoader {
 }
 
 // Load 加载怪物表数据
+// 从monster.xlsx文件读取怪物配置
+// 参数:
+//   - dir: Excel文件所在目录
+//
+// 返回: 加载错误
 func (mtl *MonsterTableLoader) Load(dir string) error {
 	config := ExcelConfig{
 		FileName:   "monster.xlsx",
@@ -28,7 +32,7 @@ func (mtl *MonsterTableLoader) Load(dir string) error {
 		TableName:  "monsters",
 	}
 
-	// 使用临时map批量加载数据，减少锁竞争
+	// 使用临时map批量加载数据
 	tempMonsters := make(map[int32]*models.Monster)
 
 	err := ReadExcelFile(config, dir, func(row []string) error {
@@ -50,37 +54,38 @@ func (mtl *MonsterTableLoader) Load(dir string) error {
 		return nil
 	})
 
-	// 批量写入到目标map，只需加一次锁
+	// 加载完成后一次性赋值
 	if err == nil {
-		mtl.mu.Lock()
 		mtl.monsters = tempMonsters
-		mtl.mu.Unlock()
 	}
 
 	return err
 }
 
 // GetTableName 获取表格名称
+// 返回: 表格名称"monsters"
 func (mtl *MonsterTableLoader) GetTableName() string {
 	return "monsters"
 }
 
 // GetMonster 根据ID获取怪物配置
+// 参数:
+//   - monsterID: 怪物ID
+//
+// 返回: 怪物配置和是否存在
 func (mtl *MonsterTableLoader) GetMonster(monsterID int32) (*models.Monster, bool) {
-	mtl.mu.RLock()
 	monster, ok := mtl.monsters[monsterID]
-	mtl.mu.RUnlock()
 	return monster, ok
 }
 
 // GetAllMonsters 获取所有怪物配置
+// 返回配置的副本map，避免外部修改内部数据
+// 返回: 怪物配置映射副本
 func (mtl *MonsterTableLoader) GetAllMonsters() map[int32]*models.Monster {
-	mtl.mu.RLock()
 	// 创建一个副本，避免外部修改内部数据
 	monstersCopy := make(map[int32]*models.Monster, len(mtl.monsters))
 	for id, monster := range mtl.monsters {
 		monstersCopy[id] = monster
 	}
-	mtl.mu.RUnlock()
 	return monstersCopy
 }

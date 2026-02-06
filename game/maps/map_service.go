@@ -7,7 +7,8 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zService"
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -18,10 +19,11 @@ import (
 
 type MapService struct {
 	zService.BaseService
-	maps        *zMap.TypedShardedMap[common.MapIdType, *Map]                  // 存储所有地图实例，key: MapIdType, value: *Map
-	objectMap   *zMap.TypedShardedMap[common.ObjectIdType, common.MapIdType]   // 存储对象到地图的映射，key: ObjectIdType, value: MapIdType
-	gameObjects *zMap.TypedShardedMap[common.ObjectIdType, common.IGameObject] // 存储所有游戏对象，key: ObjectIdType, value: common.IGameObject
-	maxMaps     int                                                            // 最大地图数量限制
+	maps        *zMap.TypedShardedMap[common.MapIdType, *Map]                      // 存储所有地图实例，key: MapIdType, value: *Map
+	objectMap   *zMap.TypedShardedMap[common.ObjectIdType, common.MapIdType]       // 存储对象到地图的映射，key: ObjectIdType, value: MapIdType
+	gameObjects *zMap.TypedShardedMap[common.ObjectIdType, gamecommon.IGameObject] // 存储所有游戏对象，key: ObjectIdType, value: gamecommon.IGameObject
+	maxMaps     int                                                                // 最大地图数量限制
+	stopSyncCh  chan struct{}                                                      // 停止同步循环的信号通道
 }
 
 // NewMapService 创建地图服务实例
@@ -31,8 +33,9 @@ func NewMapService() *MapService {
 		BaseService: *zService.NewBaseService(common.ServiceIdMap),
 		maps:        zMap.NewTypedShardedMap32[common.MapIdType, *Map](),
 		objectMap:   zMap.NewTypedShardedMap32[common.ObjectIdType, common.MapIdType](),
-		gameObjects: zMap.NewTypedShardedMap32[common.ObjectIdType, common.IGameObject](),
+		gameObjects: zMap.NewTypedShardedMap32[common.ObjectIdType, gamecommon.IGameObject](),
 		maxMaps:     100,
+		stopSyncCh:  make(chan struct{}),
 	}
 	return ms
 }
@@ -59,7 +62,13 @@ func (ms *MapService) Init() error {
 func (ms *MapService) Close() error {
 	ms.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing map service...")
-	// 清理地图服务相关资源
+
+	select {
+	case <-ms.stopSyncCh:
+	default:
+		close(ms.stopSyncCh)
+	}
+
 	ms.maps.Clear()
 	ms.objectMap.Clear()
 	ms.gameObjects.Clear()
@@ -77,10 +86,9 @@ func (ms *MapService) Serve() {
 
 // LoadMap 加载单个地图文件
 // filePath: 地图文件路径
+// mapConfigID: 地图配置ID
 // 返回加载过程中的错误，如果有
-func (ms *MapService) LoadMap(filePath string) error {
-	// 创建地图对象（这里需要从文件加载地图配置，暂时使用默认值）
-	// 实际项目中应该从文件加载地图配置
+func (ms *MapService) LoadMap(filePath string, mapConfigID int32) error {
 	mapID, err := common.GenerateMapID()
 	if err != nil {
 		zLog.Error("Failed to generate map ID", zap.Error(err))
@@ -90,11 +98,12 @@ func (ms *MapService) LoadMap(filePath string) error {
 	width := float32(1000)
 	height := float32(1000)
 
-	mapObj := NewMap(mapID, mapName, width, height)
+	mapObj := NewMap(mapID, mapConfigID, mapName, width, height)
 
-	// 存储地图
 	mapId := mapObj.GetID()
 	ms.maps.Store(mapId, mapObj)
+
+	mapObj.InitSpawnSystem()
 
 	zLog.Info("Map loaded successfully", zap.Any("mapId", mapId), zap.String("mapName", mapObj.GetName()), zap.String("file_path", filePath))
 	return nil
@@ -118,10 +127,10 @@ func (ms *MapService) LoadAllMaps(directoryPath string) error {
 	}
 
 	// 加载每个地图文件
-	for _, file := range files {
-		if err := ms.LoadMap(file); err != nil {
+	for i, file := range files {
+		mapConfigID := int32(i + 1)
+		if err := ms.LoadMap(file, mapConfigID); err != nil {
 			zLog.Error("Failed to load map", zap.String("file_path", file), zap.Error(err))
-			// 继续加载其他地图，不因为一个地图失败而停止
 		}
 	}
 
@@ -132,9 +141,17 @@ func (ms *MapService) LoadAllMaps(directoryPath string) error {
 // mapSyncLoop 地图同步循环
 // 定期同步地图对象的位置和状态
 func (ms *MapService) mapSyncLoop() {
-	// 每1000毫秒同步一次地图对象
-	for range time.Tick(time.Millisecond * 1000) {
-		ms.syncMaps()
+	ticker := time.NewTicker(time.Millisecond * 1000)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			ms.syncMaps()
+		case <-ms.stopSyncCh:
+			zLog.Debug("Map sync loop stopped")
+			return
+		}
 	}
 }
 
@@ -155,7 +172,7 @@ func (ms *MapService) syncMaps() {
 // AddGameObject 添加游戏对象到地图服务
 // obj: 游戏对象
 // mapId: 地图ID
-func (ms *MapService) AddGameObject(obj common.IGameObject, mapId common.MapIdType) {
+func (ms *MapService) AddGameObject(obj gamecommon.IGameObject, mapId common.MapIdType) {
 	objectId := common.ObjectIdType(obj.GetID())
 	ms.gameObjects.Store(objectId, obj)
 	ms.objectMap.Store(objectId, mapId)
@@ -176,7 +193,7 @@ func (ms *MapService) RemoveGameObject(objectId common.ObjectIdType) {
 // GetGameObject 根据对象ID获取游戏对象
 // objectId: 对象ID
 // 返回游戏对象，如果不存在则返回nil
-func (ms *MapService) GetGameObject(objectId common.ObjectIdType) common.IGameObject {
+func (ms *MapService) GetGameObject(objectId common.ObjectIdType) gamecommon.IGameObject {
 	if obj, exists := ms.gameObjects.Load(objectId); exists {
 		return obj
 	}
@@ -186,9 +203,9 @@ func (ms *MapService) GetGameObject(objectId common.ObjectIdType) common.IGameOb
 // GetGameObjectsByType 根据对象类型获取游戏对象列表
 // objectType: 对象类型
 // 返回指定类型的游戏对象列表
-func (ms *MapService) GetGameObjectsByType(objectType common.GameObjectType) []common.IGameObject {
-	var objects []common.IGameObject
-	ms.gameObjects.Range(func(key common.ObjectIdType, value common.IGameObject) bool {
+func (ms *MapService) GetGameObjectsByType(objectType gamecommon.GameObjectType) []gamecommon.IGameObject {
+	var objects []gamecommon.IGameObject
+	ms.gameObjects.Range(func(key common.ObjectIdType, value gamecommon.IGameObject) bool {
 		obj := value
 		if obj.GetType() == objectType {
 			objects = append(objects, obj)
@@ -201,8 +218,8 @@ func (ms *MapService) GetGameObjectsByType(objectType common.GameObjectType) []c
 // GetGameObjectsByMap 根据地图ID获取游戏对象列表
 // mapId: 地图ID
 // 返回指定地图的游戏对象列表
-func (ms *MapService) GetGameObjectsByMap(mapId common.MapIdType) []common.IGameObject {
-	var objects []common.IGameObject
+func (ms *MapService) GetGameObjectsByMap(mapId common.MapIdType) []gamecommon.IGameObject {
+	var objects []gamecommon.IGameObject
 	ms.objectMap.Range(func(key common.ObjectIdType, value common.MapIdType) bool {
 		if value == mapId {
 			objectId := key

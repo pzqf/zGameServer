@@ -7,30 +7,32 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zService"
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
-const (
-	PlayerServiceName = "PlayerService"
-	MaxPlayerActors   = 10000
-)
-
+// PlayerService 玩家服务
+// 管理所有在线玩家Actor，提供玩家创建、查找、移除等功能
 type PlayerService struct {
 	zService.BaseService
-	mu            sync.RWMutex
-	playerActors  *zMap.TypedShardedMap[common.PlayerIdType, *PlayerActor]       // key: PlayerIdType, value: *PlayerActor
-	sessionPlayer *zMap.TypedShardedMap[zNet.SessionIdType, common.PlayerIdType] // key: SessionIdType, value: PlayerIdType
-	playerCount   int64
-	metrics       *PlayerMetrics
+	mu            sync.RWMutex                                                         // 读写锁
+	playerActors  *zMap.TypedShardedMap[common.PlayerIdType, *PlayerActor]             // 玩家Actor映射表（PlayerId -> PlayerActor）
+	sessionPlayer *zMap.TypedShardedMap[zNet.SessionIdType, common.PlayerIdType]       // 会话玩家映射表（SessionId -> PlayerId）
+	playerCount   int64                                                                // 当前在线玩家数
+	metrics       *PlayerMetrics                                                       // 性能指标统计
 }
 
+// PlayerMetrics 玩家统计指标
+// 用于监控和统计玩家在线情况
 type PlayerMetrics struct {
-	PlayerCount int64
-	OnlineTime  map[common.PlayerIdType]time.Time
+	PlayerCount int64                              // 玩家数量
+	OnlineTime  map[common.PlayerIdType]time.Time  // 玩家上线时间记录
 }
 
+// NewPlayerService 创建玩家服务
+// 返回: 新创建的PlayerService实例
 func NewPlayerService() *PlayerService {
 	ps := &PlayerService{
 		BaseService:   *zService.NewBaseService(common.ServiceIdPlayer),
@@ -43,12 +45,17 @@ func NewPlayerService() *PlayerService {
 	return ps
 }
 
+// Init 初始化玩家服务
+// 返回: 初始化错误（如果有）
 func (ps *PlayerService) Init() error {
 	ps.SetState(zService.ServiceStateInit)
 	zLog.Info("Initializing player service...", zap.String("serviceId", ps.ServiceId()))
 	return nil
 }
 
+// Close 关闭玩家服务
+// 停止所有玩家Actor，清理资源
+// 返回: 关闭错误（如果有）
 func (ps *PlayerService) Close() error {
 	ps.SetState(zService.ServiceStateStopping)
 	zLog.Info("Closing player service...", zap.String("serviceId", ps.ServiceId()))
@@ -56,6 +63,7 @@ func (ps *PlayerService) Close() error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
+	// 停止所有玩家Actor
 	ps.playerActors.Range(func(key common.PlayerIdType, value *PlayerActor) bool {
 		playerActor := value
 		playerActor.Stop()
@@ -69,20 +77,34 @@ func (ps *PlayerService) Close() error {
 	return nil
 }
 
+// CreatePlayerActor 创建玩家Actor
+// 参数:
+//   - session: 网络会话
+//   - playerId: 玩家ID
+//   - name: 玩家名称
+//
+// 返回:
+//   - *PlayerActor: 新创建的玩家Actor
+//   - error: 创建错误（玩家数已满或玩家已存在）
 func (ps *PlayerService) CreatePlayerActor(session *zNet.TcpServerSession, playerId common.PlayerIdType, name string) (*PlayerActor, error) {
-	if ps.getPlayerCount() >= MaxPlayerActors {
+	// 检查服务器人数上限
+	maxPlayers := config.GetServerConfig().MaxClientCount
+	if ps.getPlayerCount() >= int64(maxPlayers) {
 		return nil, errTooManyPlayers
 	}
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
+	// 检查玩家是否已在线
 	if _, exists := ps.playerActors.Load(playerId); exists {
 		return nil, nil
 	}
 
+	// 创建新的玩家Actor
 	playerActor := NewPlayerActor(playerId, name, session)
 
+	// 注册到映射表
 	ps.playerActors.Store(playerId, playerActor)
 	ps.sessionPlayer.Store(session.GetSid(), playerId)
 	ps.metrics.OnlineTime[playerId] = time.Now()
@@ -96,10 +118,18 @@ func (ps *PlayerService) CreatePlayerActor(session *zNet.TcpServerSession, playe
 	return playerActor, nil
 }
 
+// Serve 启动服务
+// 将服务状态设置为Running
 func (ps *PlayerService) Serve() {
 	ps.SetState(zService.ServiceStateRunning)
 }
 
+// GetPlayer 获取玩家对象
+// 参数:
+//   - playerId: 玩家ID
+//
+// 返回:
+//   - *Player: 玩家对象（如果存在），否则返回nil
 func (ps *PlayerService) GetPlayer(playerId common.PlayerIdType) *Player {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
@@ -110,6 +140,12 @@ func (ps *PlayerService) GetPlayer(playerId common.PlayerIdType) *Player {
 	return nil
 }
 
+// GetPlayerBySession 通过会话ID获取玩家对象
+// 参数:
+//   - sessionId: 会话ID
+//
+// 返回:
+//   - *Player: 玩家对象（如果存在），否则返回nil
 func (ps *PlayerService) GetPlayerBySession(sessionId zNet.SessionIdType) *Player {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
@@ -120,6 +156,12 @@ func (ps *PlayerService) GetPlayerBySession(sessionId zNet.SessionIdType) *Playe
 	return nil
 }
 
+// GetPlayerActor 获取玩家Actor
+// 参数:
+//   - playerId: 玩家ID
+//
+// 返回:
+//   - *PlayerActor: 玩家Actor（如果存在），否则返回nil
 func (ps *PlayerService) GetPlayerActor(playerId common.PlayerIdType) *PlayerActor {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
@@ -130,6 +172,12 @@ func (ps *PlayerService) GetPlayerActor(playerId common.PlayerIdType) *PlayerAct
 	return nil
 }
 
+// GetPlayerActorBySession 通过会话ID获取玩家Actor
+// 参数:
+//   - sessionId: 会话ID
+//
+// 返回:
+//   - *PlayerActor: 玩家Actor（如果存在），否则返回nil
 func (ps *PlayerService) GetPlayerActorBySession(sessionId zNet.SessionIdType) *PlayerActor {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
@@ -140,6 +188,10 @@ func (ps *PlayerService) GetPlayerActorBySession(sessionId zNet.SessionIdType) *
 	return nil
 }
 
+// RemovePlayer 移除玩家
+// 停止玩家Actor，清理映射表
+// 参数:
+//   - playerId: 玩家ID
 func (ps *PlayerService) RemovePlayer(playerId common.PlayerIdType) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -150,6 +202,7 @@ func (ps *PlayerService) RemovePlayer(playerId common.PlayerIdType) {
 		delete(ps.metrics.OnlineTime, playerId)
 		ps.playerCount--
 
+		// 清理会话映射
 		if player := playerActor.Player; player != nil {
 			if session := player.GetSession(); session != nil {
 				ps.sessionPlayer.Delete(session.GetSid())
@@ -162,6 +215,10 @@ func (ps *PlayerService) RemovePlayer(playerId common.PlayerIdType) {
 	}
 }
 
+// OnSessionClose 会话关闭处理
+// 当客户端断开连接时调用，清理相关玩家数据
+// 参数:
+//   - sessionId: 关闭的会话ID
 func (ps *PlayerService) OnSessionClose(sessionId zNet.SessionIdType) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -181,12 +238,16 @@ func (ps *PlayerService) OnSessionClose(sessionId zNet.SessionIdType) {
 	}
 }
 
+// getPlayerCount 获取当前在线玩家数量
+// 返回: 在线玩家数
 func (ps *PlayerService) getPlayerCount() int64 {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	return ps.playerCount
 }
 
+// getPlayerUnsafe 不安全方式获取玩家对象
+// 注意: 调用前必须持有锁
 func (ps *PlayerService) getPlayerUnsafe(playerId common.PlayerIdType) *Player {
 	if playerActor, exists := ps.playerActors.Load(playerId); exists {
 		return playerActor.Player
@@ -194,6 +255,8 @@ func (ps *PlayerService) getPlayerUnsafe(playerId common.PlayerIdType) *Player {
 	return nil
 }
 
+// getPlayerActorUnsafe 不安全方式获取玩家Actor
+// 注意: 调用前必须持有锁
 func (ps *PlayerService) getPlayerActorUnsafe(playerId common.PlayerIdType) *PlayerActor {
 	if playerActor, exists := ps.playerActors.Load(playerId); exists {
 		return playerActor

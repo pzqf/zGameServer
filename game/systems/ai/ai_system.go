@@ -8,61 +8,56 @@ import (
 
 	"github.com/pzqf/zEngine/zObject"
 	"github.com/pzqf/zEngine/zSystem"
+	"github.com/pzqf/zGameServer/common"
 	"github.com/pzqf/zGameServer/config/tables"
-	"github.com/pzqf/zGameServer/game/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 )
 
-// AIActionState AI状态枚举
 type AIActionState int
 
 const (
-	AIActionStateIdle       AIActionState = iota // idle状态
-	AIActionStatePatrolling                      // 巡逻状态
-	AIActionStateChasing                         // 追击状态
-	AIActionStateAttacking                       // 攻击状态
-	AIActionStateFleeing                         // 逃跑状态
-	AIActionStateTalking                         // 对话状态
+	AIActionStateIdle AIActionState = iota
+	AIActionStatePatrolling
+	AIActionStateChasing
+	AIActionStateAttacking
+	AIActionStateFleeing
+	AIActionStateTalking
 )
 
-// AIType AI类型枚举
 type AIType int
 
 const (
-	AITypeMonster AIType = iota // 怪物AI
-	AITypeNPC                   // NPC AI
+	AITypeMonster AIType = iota
+	AITypeNPC
 )
 
-// AI ai数据结构
 type AI struct {
-	ID             int32               // AI ID
-	Type           AIType              // AI类型：怪物、NPC
-	State          AIActionState       // AI状态：idle、巡逻、追击、攻击、逃跑、对话
-	TargetID       common.ObjectIdType // 目标ID
-	PatrolPoints   []common.Vector3    // 巡逻点
-	CurrentPoint   int                 // 当前巡逻点
-	DetectionRange float32             // 检测范围
-	AttackRange    float32             // 攻击范围
-	ChaseRange     float32             // 追击范围
-	FleeHealth     float32             // 逃跑生命值阈值
-	LastAction     time.Time           // 最后行动时间
+	ID             int32
+	Type           AIType
+	State          AIActionState
+	TargetID       common.ObjectIdType
+	PatrolPoints   []gamecommon.Vector3
+	CurrentPoint   int
+	DetectionRange float32
+	AttackRange    float32
+	ChaseRange     float32
+	FleeHealth     float32
+	LastAction     time.Time
 }
 
-// AIState ai状态
 type AIState struct {
 	ownerID common.ObjectIdType
 	ai      *AI
 }
 
-// AISystem ai系统
 type AISystem struct {
 	*zSystem.BaseSystem
 	mu        sync.RWMutex
 	aiStates  map[common.ObjectIdType]*AIState
-	statePool *zObject.GenericPool // ai状态对象池
-	aiPool    *zObject.GenericPool // ai对象池
+	statePool *zObject.GenericPool
+	aiPool    *zObject.GenericPool
 }
 
-// NewAISystem 创建AI系统
 func NewAISystem() *AISystem {
 	return &AISystem{
 		BaseSystem: zSystem.NewBaseSystem("AISystem"),
@@ -72,7 +67,6 @@ func NewAISystem() *AISystem {
 	}
 }
 
-// InitAI 初始化AI
 func (as *AISystem) InitAI(ownerID common.ObjectIdType, aiID int32, aiType AIType, detectionRange, attackRange, chaseRange, fleeHealth float32) {
 	as.mu.Lock()
 	defer as.mu.Unlock()
@@ -89,7 +83,7 @@ func (as *AISystem) InitAI(ownerID common.ObjectIdType, aiID int32, aiType AITyp
 	ai.Type = aiType
 	ai.State = AIActionStateIdle
 	ai.TargetID = 0
-	ai.PatrolPoints = make([]common.Vector3, 0)
+	ai.PatrolPoints = make([]gamecommon.Vector3, 0)
 	ai.CurrentPoint = 0
 	ai.DetectionRange = detectionRange
 	ai.AttackRange = attackRange
@@ -100,7 +94,6 @@ func (as *AISystem) InitAI(ownerID common.ObjectIdType, aiID int32, aiType AITyp
 	aiState.ai = ai
 }
 
-// InitAIFromConfig 从配置表初始化AI
 func (as *AISystem) InitAIFromConfig(ownerID common.ObjectIdType, aiID int32) {
 	aiConfig := tables.GetAIByID(aiID)
 	if aiConfig == nil {
@@ -124,13 +117,12 @@ func (as *AISystem) InitAIFromConfig(ownerID common.ObjectIdType, aiID int32) {
 	}
 }
 
-// ParsePatrolPoints 解析巡逻点
-func (as *AISystem) ParsePatrolPoints(patrolPointsStr string) []common.Vector3 {
+func (as *AISystem) ParsePatrolPoints(patrolPointsStr string) []gamecommon.Vector3 {
 	if patrolPointsStr == "" {
 		return nil
 	}
 
-	points := make([]common.Vector3, 0)
+	points := make([]gamecommon.Vector3, 0)
 	pointStrs := strings.Split(patrolPointsStr, ";")
 
 	for _, pointStr := range pointStrs {
@@ -154,7 +146,7 @@ func (as *AISystem) ParsePatrolPoints(patrolPointsStr string) []common.Vector3 {
 			continue
 		}
 
-		points = append(points, common.Vector3{
+		points = append(points, gamecommon.Vector3{
 			X: float32(x),
 			Y: float32(y),
 			Z: float32(z),
@@ -164,8 +156,7 @@ func (as *AISystem) ParsePatrolPoints(patrolPointsStr string) []common.Vector3 {
 	return points
 }
 
-// SetPatrolPoints 设置巡逻点
-func (as *AISystem) SetPatrolPoints(ownerID common.ObjectIdType, points []common.Vector3) {
+func (as *AISystem) SetPatrolPoints(ownerID common.ObjectIdType, points []gamecommon.Vector3) {
 	as.mu.Lock()
 	defer as.mu.Unlock()
 
@@ -186,7 +177,6 @@ func (as *AISystem) SetPatrolPoints(ownerID common.ObjectIdType, points []common
 	}
 }
 
-// Initialize 初始化系统
 func (as *AISystem) Initialize() error {
 	as.mu.Lock()
 	defer as.mu.Unlock()
@@ -198,12 +188,10 @@ func (as *AISystem) Initialize() error {
 	return nil
 }
 
-// Update 更新系统
 func (as *AISystem) Update(deltaTime float64) {
 	as.UpdateAI()
 }
 
-// UpdateAI 更新AI状态
 func (as *AISystem) UpdateAI() {
 	as.mu.RLock()
 	ownerIDs := make([]common.ObjectIdType, 0, len(as.aiStates))
@@ -217,7 +205,6 @@ func (as *AISystem) UpdateAI() {
 	}
 }
 
-// updateAIForOwner 更新指定所有者的AI状态
 func (as *AISystem) updateAIForOwner(ownerID common.ObjectIdType) {
 	as.mu.Lock()
 	defer as.mu.Unlock()
@@ -238,7 +225,6 @@ func (as *AISystem) updateAIForOwner(ownerID common.ObjectIdType) {
 	}
 }
 
-// updateMonsterAI 更新怪物AI
 func (as *AISystem) updateMonsterAI(ownerID common.ObjectIdType, ai *AI, currentTime time.Time) {
 	switch ai.State {
 	case AIActionStateIdle:
@@ -254,13 +240,11 @@ func (as *AISystem) updateMonsterAI(ownerID common.ObjectIdType, ai *AI, current
 	}
 }
 
-// updateNPCAI 更新NPC AI
 func (as *AISystem) updateNPCAI(ownerID common.ObjectIdType, ai *AI, currentTime time.Time) {
 	if ai.State == AIActionStateIdle {
 	}
 }
 
-// handleIdleState 处理idle状态
 func (as *AISystem) handleIdleState(ownerID common.ObjectIdType, ai *AI, currentTime time.Time) {
 	targetID := as.SelectTarget(ownerID, ai)
 	if targetID > 0 {
@@ -277,7 +261,6 @@ func (as *AISystem) handleIdleState(ownerID common.ObjectIdType, ai *AI, current
 	}
 }
 
-// handlePatrollingState 处理巡逻状态
 func (as *AISystem) handlePatrollingState(ownerID common.ObjectIdType, ai *AI, currentTime time.Time) {
 	targetID := as.SelectTarget(ownerID, ai)
 	if targetID > 0 {
@@ -293,7 +276,7 @@ func (as *AISystem) handlePatrollingState(ownerID common.ObjectIdType, ai *AI, c
 		return
 	}
 
-	obj := as.getGameObject(uint64(ownerID))
+	obj := as.getGameObject(ownerID)
 	if obj == nil {
 		return
 	}
@@ -305,7 +288,7 @@ func (as *AISystem) handlePatrollingState(ownerID common.ObjectIdType, ai *AI, c
 	movementComponent := obj.GetComponent("movement")
 	if movementComponent != nil {
 		if move, ok := movementComponent.(interface {
-			MoveTo(targetPos common.Vector3, speed float32)
+			MoveTo(targetPos gamecommon.Vector3, speed float32)
 		}); ok {
 			move.MoveTo(currentPoint, 2.0)
 		}
@@ -318,7 +301,6 @@ func (as *AISystem) handlePatrollingState(ownerID common.ObjectIdType, ai *AI, c
 	ai.LastAction = currentTime
 }
 
-// handleChasingState 处理追击状态
 func (as *AISystem) handleChasingState(ownerID common.ObjectIdType, ai *AI, currentTime time.Time) {
 	if ai.TargetID == 0 {
 		ai.State = AIActionStateIdle
@@ -326,8 +308,8 @@ func (as *AISystem) handleChasingState(ownerID common.ObjectIdType, ai *AI, curr
 		return
 	}
 
-	obj := as.getGameObject(uint64(ownerID))
-	target := as.getGameObject(uint64(ai.TargetID))
+	obj := as.getGameObject(ownerID)
+	target := as.getGameObject(ai.TargetID)
 
 	if obj == nil || target == nil {
 		ai.State = AIActionStateIdle
@@ -349,7 +331,7 @@ func (as *AISystem) handleChasingState(ownerID common.ObjectIdType, ai *AI, curr
 	movementComponent := obj.GetComponent("movement")
 	if movementComponent != nil {
 		if move, ok := movementComponent.(interface {
-			MoveTo(targetPos common.Vector3, speed float32)
+			MoveTo(targetPos gamecommon.Vector3, speed float32)
 		}); ok {
 			move.MoveTo(targetPos, 3.0)
 		}
@@ -363,7 +345,6 @@ func (as *AISystem) handleChasingState(ownerID common.ObjectIdType, ai *AI, curr
 	ai.LastAction = currentTime
 }
 
-// handleAttackingState 处理攻击状态
 func (as *AISystem) handleAttackingState(ownerID common.ObjectIdType, ai *AI, currentTime time.Time) {
 	if ai.TargetID == 0 {
 		ai.State = AIActionStateIdle
@@ -371,8 +352,8 @@ func (as *AISystem) handleAttackingState(ownerID common.ObjectIdType, ai *AI, cu
 		return
 	}
 
-	obj := as.getGameObject(uint64(ownerID))
-	target := as.getGameObject(uint64(ai.TargetID))
+	obj := as.getGameObject(ownerID)
+	target := as.getGameObject(ai.TargetID)
 
 	if obj == nil || target == nil {
 		ai.State = AIActionStateIdle
@@ -392,8 +373,10 @@ func (as *AISystem) handleAttackingState(ownerID common.ObjectIdType, ai *AI, cu
 
 	combatComponent := obj.GetComponent("combat")
 	if combatComponent != nil {
-		if combat, ok := combatComponent.(interface{ StartCombat(targetID uint64) }); ok {
-			combat.StartCombat(uint64(ai.TargetID))
+		if combat, ok := combatComponent.(interface {
+			StartCombat(targetID common.ObjectIdType)
+		}); ok {
+			combat.StartCombat(ai.TargetID)
 		}
 	}
 
@@ -417,9 +400,8 @@ func (as *AISystem) handleAttackingState(ownerID common.ObjectIdType, ai *AI, cu
 	ai.LastAction = currentTime
 }
 
-// handleFleeingState 处理逃跑状态
 func (as *AISystem) handleFleeingState(ownerID common.ObjectIdType, ai *AI, currentTime time.Time) {
-	obj := as.getGameObject(uint64(ownerID))
+	obj := as.getGameObject(ownerID)
 	if obj == nil {
 		ai.State = AIActionStateIdle
 		ai.TargetID = 0
@@ -428,17 +410,17 @@ func (as *AISystem) handleFleeingState(ownerID common.ObjectIdType, ai *AI, curr
 	}
 
 	startPos := obj.GetPosition()
-	var targetPos common.Vector3
+	var targetPos gamecommon.Vector3
 
 	if ai.TargetID > 0 {
-		target := as.getGameObject(uint64(ai.TargetID))
+		target := as.getGameObject(ai.TargetID)
 		if target != nil {
 			targetPos = target.GetPosition()
 		} else {
-			targetPos = startPos.Add(common.Vector3{X: 1, Y: 1, Z: 0})
+			targetPos = startPos.Add(gamecommon.Vector3{X: 1, Y: 1, Z: 0})
 		}
 	} else {
-		targetPos = startPos.Add(common.Vector3{X: 1, Y: 1, Z: 0})
+		targetPos = startPos.Add(gamecommon.Vector3{X: 1, Y: 1, Z: 0})
 	}
 
 	direction := startPos.Subtract(targetPos).Normalize()
@@ -447,14 +429,14 @@ func (as *AISystem) handleFleeingState(ownerID common.ObjectIdType, ai *AI, curr
 	movementComponent := obj.GetComponent("movement")
 	if movementComponent != nil {
 		if move, ok := movementComponent.(interface {
-			MoveTo(targetPos common.Vector3, speed float32)
+			MoveTo(targetPos gamecommon.Vector3, speed float32)
 		}); ok {
 			move.MoveTo(fleePos, 4.0)
 		}
 	}
 
 	if ai.TargetID > 0 {
-		target := as.getGameObject(uint64(ai.TargetID))
+		target := as.getGameObject(ai.TargetID)
 		if target != nil {
 			currentDistance := startPos.DistanceTo(target.GetPosition())
 			if currentDistance > ai.ChaseRange {
@@ -469,9 +451,8 @@ func (as *AISystem) handleFleeingState(ownerID common.ObjectIdType, ai *AI, curr
 	ai.LastAction = currentTime
 }
 
-// SelectTarget 选择目标
 func (as *AISystem) SelectTarget(ownerID common.ObjectIdType, ai *AI) common.ObjectIdType {
-	obj := as.getGameObject(uint64(ownerID))
+	obj := as.getGameObject(ownerID)
 	if obj == nil {
 		return 0
 	}
@@ -486,7 +467,7 @@ func (as *AISystem) SelectTarget(ownerID common.ObjectIdType, ai *AI) common.Obj
 	objects := mapObj.GetObjectsInRange(startPos, ai.DetectionRange)
 
 	for _, target := range objects {
-		if target.GetType() == common.GameObjectTypePlayer {
+		if target.GetType() == gamecommon.GameObjectTypePlayer {
 			if startPos.DistanceTo(target.GetPosition()) <= ai.DetectionRange*ai.DetectionRange {
 				return target.GetID()
 			}
@@ -496,7 +477,6 @@ func (as *AISystem) SelectTarget(ownerID common.ObjectIdType, ai *AI) common.Obj
 	return 0
 }
 
-// Shutdown 关闭系统
 func (as *AISystem) Shutdown() error {
 	as.mu.Lock()
 	defer as.mu.Unlock()
@@ -514,7 +494,6 @@ func (as *AISystem) Shutdown() error {
 	return nil
 }
 
-// getGameObject 获取游戏对象
-func (as *AISystem) getGameObject(objectID uint64) common.IGameObject {
+func (as *AISystem) getGameObject(objectID common.ObjectIdType) gamecommon.IGameObject {
 	return nil
 }

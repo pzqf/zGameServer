@@ -1,15 +1,12 @@
 package tables
 
 import (
-	"sync"
-
 	"github.com/pzqf/zGameServer/config/models"
 )
 
 // PlayerLevelTableLoader 人物等级表加载器
 type PlayerLevelTableLoader struct {
-	mu           sync.RWMutex
-	playerLevels map[int32]*models.PlayerLevel
+	playerLevels map[int32]*models.PlayerLevel // 等级配置映射
 }
 
 // NewPlayerLevelTableLoader 创建人物等级表加载器
@@ -28,7 +25,6 @@ func (plt *PlayerLevelTableLoader) Load(dir string) error {
 		TableName:  "playerLevels",
 	}
 
-	// 使用临时map批量加载数据，减少锁竞争
 	tempPlayerLevels := make(map[int32]*models.PlayerLevel)
 
 	err := ReadExcelFile(config, dir, func(row []string) error {
@@ -47,11 +43,8 @@ func (plt *PlayerLevelTableLoader) Load(dir string) error {
 		return nil
 	})
 
-	// 批量写入到目标map，只需加一次锁
 	if err == nil {
-		plt.mu.Lock()
 		plt.playerLevels = tempPlayerLevels
-		plt.mu.Unlock()
 	}
 
 	return err
@@ -64,20 +57,15 @@ func (plt *PlayerLevelTableLoader) GetTableName() string {
 
 // GetPlayerLevel 根据ID获取等级配置
 func (plt *PlayerLevelTableLoader) GetPlayerLevel(levelID int32) (*models.PlayerLevel, bool) {
-	plt.mu.RLock()
 	level, ok := plt.playerLevels[levelID]
-	plt.mu.RUnlock()
 	return level, ok
 }
 
 // GetAllPlayerLevels 获取所有等级配置
 func (plt *PlayerLevelTableLoader) GetAllPlayerLevels() map[int32]*models.PlayerLevel {
-	plt.mu.RLock()
-	// 创建一个副本，避免外部修改内部数据
 	playerLevelsCopy := make(map[int32]*models.PlayerLevel, len(plt.playerLevels))
 	for id, level := range plt.playerLevels {
 		playerLevelsCopy[id] = level
 	}
-	plt.mu.RUnlock()
 	return playerLevelsCopy
 }

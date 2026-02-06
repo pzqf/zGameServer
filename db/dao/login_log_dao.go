@@ -4,47 +4,39 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/pzqf/zGameServer/common"
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/models"
-	"github.com/pzqf/zGameServer/game/common"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// LoginLogDAO 角色登录/登出日志数据访问对象
 type LoginLogDAO struct {
 	connector connector.DBConnector
 }
 
-// NewLoginLogDAO 创建角色登录/登出日志DAO实例
 func NewLoginLogDAO(dbConnector connector.DBConnector) *LoginLogDAO {
 	return &LoginLogDAO{
 		connector: dbConnector,
 	}
 }
 
-// GetLoginLogByCharID 根据角色ID获取登录/登出日志
-func (dao *LoginLogDAO) GetLoginLogByCharID(charID int64, callback func(*models.LoginLog, error)) {
-	// 根据数据库驱动类型执行不同的查询操作
+func (dao *LoginLogDAO) GetLoginLogByPlayerID(playerID int64, callback func(*models.LoginLog, error)) {
 	if dao.connector.GetDriver() == "mongo" {
-		// MongoDB查询
 		collection := dao.connector.GetMongoDB().Collection(models.LoginLog{}.TableName())
 		var loginLog models.LoginLog
 
-		// 使用FindOne查询单个文档
-		result := collection.FindOne(nil, bson.M{"char_id": charID})
+		result := collection.FindOne(nil, bson.M{"player_id": playerID})
 		err := result.Decode(&loginLog)
 
 		if err != nil {
-			// 如果是未找到文档的错误，返回nil
 			if err.Error() == "mongo: no documents in result" {
 				if callback != nil {
-					callback(nil, nil) // 未找到日志
+					callback(nil, nil)
 				}
 				return
 			}
 
-			// 其他错误
 			if callback != nil {
 				callback(nil, err)
 			}
@@ -55,10 +47,9 @@ func (dao *LoginLogDAO) GetLoginLogByCharID(charID int64, callback func(*models.
 			callback(&loginLog, nil)
 		}
 	} else {
-		// MySQL查询
-		query := fmt.Sprintf("SELECT * FROM %s WHERE char_id = ?", models.LoginLog{}.TableName())
+		query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ?", models.LoginLog{}.TableName())
 
-		dao.connector.Query(query, []interface{}{charID}, func(rows *sql.Rows, err error) {
+		dao.connector.Query(query, []interface{}{playerID}, func(rows *sql.Rows, err error) {
 			if err != nil {
 				if callback != nil {
 					callback(nil, err)
@@ -71,9 +62,11 @@ func (dao *LoginLogDAO) GetLoginLogByCharID(charID int64, callback func(*models.
 			if rows.Next() {
 				if err := rows.Scan(
 					&loginLog.LogID,
-					&loginLog.CharID,
-					&loginLog.CharName,
+					&loginLog.PlayerID,
+					&loginLog.PlayerName,
 					&loginLog.OpType,
+					&loginLog.IP,
+					&loginLog.Device,
 					&loginLog.CreatedAt,
 				); err != nil {
 					if callback != nil {
@@ -87,14 +80,13 @@ func (dao *LoginLogDAO) GetLoginLogByCharID(charID int64, callback func(*models.
 				}
 			} else {
 				if callback != nil {
-					callback(nil, nil) // 未找到日志
+					callback(nil, nil)
 				}
 			}
 		})
 	}
 }
 
-// CreateLoginLog 创建角色登录/登出日志
 func (dao *LoginLogDAO) CreateLoginLog(loginLog *models.LoginLog, callback func(int64, error)) {
 	logID, err := common.GenerateLogID()
 	if err != nil {
@@ -105,12 +97,9 @@ func (dao *LoginLogDAO) CreateLoginLog(loginLog *models.LoginLog, callback func(
 	}
 	loginLog.LogID = int64(logID)
 
-	// 根据数据库驱动类型执行不同的插入操作
 	if dao.connector.GetDriver() == "mongo" {
-		// MongoDB插入
 		collection := dao.connector.GetMongoDB().Collection(models.LoginLog{}.TableName())
 
-		// 使用InsertOne插入文档
 		_, err := collection.InsertOne(nil, loginLog)
 
 		if err != nil {
@@ -121,18 +110,18 @@ func (dao *LoginLogDAO) CreateLoginLog(loginLog *models.LoginLog, callback func(
 		}
 
 		if callback != nil {
-			// MongoDB使用自增ID或ObjectID，但在这个模型中我们使用自定义的log_id
 			callback(loginLog.LogID, nil)
 		}
 	} else {
-		// MySQL插入
-		query := fmt.Sprintf("INSERT INTO %s (log_id, char_id, char_name, op_type, created_at) VALUES (?, ?, ?, ?, ?)", models.LoginLog{}.TableName())
+		query := fmt.Sprintf("INSERT INTO %s (log_id, player_id, player_name, op_type, ip, device, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", models.LoginLog{}.TableName())
 
 		args := []interface{}{
 			loginLog.LogID,
-			loginLog.CharID,
-			loginLog.CharName,
+			loginLog.PlayerID,
+			loginLog.PlayerName,
 			loginLog.OpType,
+			loginLog.IP,
+			loginLog.Device,
 			loginLog.CreatedAt,
 		}
 
@@ -152,24 +141,18 @@ func (dao *LoginLogDAO) CreateLoginLog(loginLog *models.LoginLog, callback func(
 	}
 }
 
-// GetLoginLogsByTimeRange 根据时间范围获取登录/登出日志
-func (dao *LoginLogDAO) GetLoginLogsByTimeRange(startTime, endTime string, callback func([]*models.LoginLog, error)) {
-	// 根据数据库驱动类型执行不同的查询操作
+func (dao *LoginLogDAO) GetLoginLogsByPlayerID(playerID int64, limit int, callback func([]*models.LoginLog, error)) {
 	if dao.connector.GetDriver() == "mongo" {
-		// MongoDB查询
 		collection := dao.connector.GetMongoDB().Collection(models.LoginLog{}.TableName())
 
-		// 构建查询条件和排序
-		filter := bson.M{
-			"created_at": bson.M{
-				"$gte": startTime,
-				"$lte": endTime,
-			},
-		}
+		filter := bson.M{"player_id": playerID}
 		sort := bson.M{"created_at": -1}
+		opts := &options.FindOptions{Sort: sort}
+		if limit > 0 {
+			opts.Limit = func(i int64) *int64 { return &i }(int64(limit))
+		}
 
-		// 使用Find查询匹配的文档
-		cursor, err := collection.Find(nil, filter, &options.FindOptions{Sort: sort})
+		cursor, err := collection.Find(nil, filter, opts)
 
 		if err != nil {
 			if callback != nil {
@@ -180,7 +163,6 @@ func (dao *LoginLogDAO) GetLoginLogsByTimeRange(startTime, endTime string, callb
 		defer cursor.Close(nil)
 
 		var loginLogs []*models.LoginLog
-		// 遍历游标，解码文档到模型
 		for cursor.Next(nil) {
 			var loginLog models.LoginLog
 			if err := cursor.Decode(&loginLog); err != nil {
@@ -196,10 +178,12 @@ func (dao *LoginLogDAO) GetLoginLogsByTimeRange(startTime, endTime string, callb
 			callback(loginLogs, nil)
 		}
 	} else {
-		// MySQL查询
-		query := fmt.Sprintf("SELECT * FROM %s WHERE created_at BETWEEN ? AND ? ORDER BY created_at DESC", models.LoginLog{}.TableName())
+		query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ? ORDER BY created_at DESC", models.LoginLog{}.TableName())
+		if limit > 0 {
+			query = fmt.Sprintf("%s LIMIT %d", query, limit)
+		}
 
-		dao.connector.Query(query, []interface{}{startTime, endTime}, func(rows *sql.Rows, err error) {
+		dao.connector.Query(query, []interface{}{playerID}, func(rows *sql.Rows, err error) {
 			if err != nil {
 				if callback != nil {
 					callback(nil, err)
@@ -213,9 +197,11 @@ func (dao *LoginLogDAO) GetLoginLogsByTimeRange(startTime, endTime string, callb
 				var loginLog models.LoginLog
 				if err := rows.Scan(
 					&loginLog.LogID,
-					&loginLog.CharID,
-					&loginLog.CharName,
+					&loginLog.PlayerID,
+					&loginLog.PlayerName,
 					&loginLog.OpType,
+					&loginLog.IP,
+					&loginLog.Device,
 					&loginLog.CreatedAt,
 				); err != nil {
 					if callback != nil {
@@ -234,19 +220,18 @@ func (dao *LoginLogDAO) GetLoginLogsByTimeRange(startTime, endTime string, callb
 	}
 }
 
-// GetLoginLogsByOpType 根据操作类型获取登录/登出日志
-func (dao *LoginLogDAO) GetLoginLogsByOpType(opType int, callback func([]*models.LoginLog, error)) {
-	// 根据数据库驱动类型执行不同的查询操作
+func (dao *LoginLogDAO) GetLoginLogsByOpType(opType int32, limit int, callback func([]*models.LoginLog, error)) {
 	if dao.connector.GetDriver() == "mongo" {
-		// MongoDB查询
 		collection := dao.connector.GetMongoDB().Collection(models.LoginLog{}.TableName())
 
-		// 构建查询条件和排序
 		filter := bson.M{"op_type": opType}
 		sort := bson.M{"created_at": -1}
+		opts := &options.FindOptions{Sort: sort}
+		if limit > 0 {
+			opts.Limit = func(i int64) *int64 { return &i }(int64(limit))
+		}
 
-		// 使用Find查询匹配的文档
-		cursor, err := collection.Find(nil, filter, &options.FindOptions{Sort: sort})
+		cursor, err := collection.Find(nil, filter, opts)
 
 		if err != nil {
 			if callback != nil {
@@ -257,7 +242,6 @@ func (dao *LoginLogDAO) GetLoginLogsByOpType(opType int, callback func([]*models
 		defer cursor.Close(nil)
 
 		var loginLogs []*models.LoginLog
-		// 遍历游标，解码文档到模型
 		for cursor.Next(nil) {
 			var loginLog models.LoginLog
 			if err := cursor.Decode(&loginLog); err != nil {
@@ -273,8 +257,10 @@ func (dao *LoginLogDAO) GetLoginLogsByOpType(opType int, callback func([]*models
 			callback(loginLogs, nil)
 		}
 	} else {
-		// MySQL查询
 		query := fmt.Sprintf("SELECT * FROM %s WHERE op_type = ? ORDER BY created_at DESC", models.LoginLog{}.TableName())
+		if limit > 0 {
+			query = fmt.Sprintf("%s LIMIT %d", query, limit)
+		}
 
 		dao.connector.Query(query, []interface{}{opType}, func(rows *sql.Rows, err error) {
 			if err != nil {
@@ -290,9 +276,11 @@ func (dao *LoginLogDAO) GetLoginLogsByOpType(opType int, callback func([]*models
 				var loginLog models.LoginLog
 				if err := rows.Scan(
 					&loginLog.LogID,
-					&loginLog.CharID,
-					&loginLog.CharName,
+					&loginLog.PlayerID,
+					&loginLog.PlayerName,
 					&loginLog.OpType,
+					&loginLog.IP,
+					&loginLog.Device,
 					&loginLog.CreatedAt,
 				); err != nil {
 					if callback != nil {

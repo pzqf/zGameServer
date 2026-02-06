@@ -1,20 +1,17 @@
 package tables
 
 import (
-	"sync"
-
 	"github.com/pzqf/zGameServer/config/models"
 )
 
 // MapTableLoader 地图表加载器
 type MapTableLoader struct {
-	mu             sync.RWMutex
-	maps           map[int32]*models.Map
-	spawnPoints    map[int32]*models.MapSpawnPoint
-	teleportPoints map[int32]*models.MapTeleportPoint
-	buildings      map[int32]*models.MapBuilding
-	events         map[int32]*models.MapEvent
-	resources      map[int32]*models.MapResource
+	maps           map[int32]*models.Map           // 地图配置映射
+	spawnPoints    map[int32]*models.MapSpawnPoint    // 生成点配置映射
+	teleportPoints map[int32]*models.MapTeleportPoint // 传送点配置映射
+	buildings      map[int32]*models.MapBuilding      // 建筑物配置映射
+	events         map[int32]*models.MapEvent         // 事件配置映射
+	resources      map[int32]*models.MapResource      // 资源配置映射
 }
 
 // NewMapTableLoader 创建地图表加载器
@@ -31,32 +28,26 @@ func NewMapTableLoader() *MapTableLoader {
 
 // Load 加载地图表数据
 func (mtl *MapTableLoader) Load(dir string) error {
-	// 加载地图基本信息
 	if err := mtl.loadMaps(dir); err != nil {
 		return err
 	}
 
-	// 加载生成点
 	if err := mtl.loadSpawnPoints(dir); err != nil {
 		return err
 	}
 
-	// 加载传送点
 	if err := mtl.loadTeleportPoints(dir); err != nil {
 		return err
 	}
 
-	// 加载建筑物
 	if err := mtl.loadBuildings(dir); err != nil {
 		return err
 	}
 
-	// 加载事件
 	if err := mtl.loadEvents(dir); err != nil {
 		return err
 	}
 
-	// 加载资源
 	if err := mtl.loadResources(dir); err != nil {
 		return err
 	}
@@ -101,9 +92,7 @@ func (mtl *MapTableLoader) loadMaps(dir string) error {
 	})
 
 	if err == nil {
-		mtl.mu.Lock()
 		mtl.maps = tempMaps
-		mtl.mu.Unlock()
 	}
 
 	return err
@@ -139,9 +128,7 @@ func (mtl *MapTableLoader) loadSpawnPoints(dir string) error {
 	})
 
 	if err == nil {
-		mtl.mu.Lock()
 		mtl.spawnPoints = tempSpawnPoints
-		mtl.mu.Unlock()
 	}
 
 	return err
@@ -180,9 +167,7 @@ func (mtl *MapTableLoader) loadTeleportPoints(dir string) error {
 	})
 
 	if err == nil {
-		mtl.mu.Lock()
 		mtl.teleportPoints = tempTeleportPoints
-		mtl.mu.Unlock()
 	}
 
 	return err
@@ -220,9 +205,7 @@ func (mtl *MapTableLoader) loadBuildings(dir string) error {
 	})
 
 	if err == nil {
-		mtl.mu.Lock()
 		mtl.buildings = tempBuildings
-		mtl.mu.Unlock()
 	}
 
 	return err
@@ -262,9 +245,7 @@ func (mtl *MapTableLoader) loadEvents(dir string) error {
 	})
 
 	if err == nil {
-		mtl.mu.Lock()
 		mtl.events = tempEvents
-		mtl.mu.Unlock()
 	}
 
 	return err
@@ -301,9 +282,7 @@ func (mtl *MapTableLoader) loadResources(dir string) error {
 	})
 
 	if err == nil {
-		mtl.mu.Lock()
 		mtl.resources = tempResources
-		mtl.mu.Unlock()
 	}
 
 	return err
@@ -311,24 +290,17 @@ func (mtl *MapTableLoader) loadResources(dir string) error {
 
 // GetMap 根据ID获取地图
 func (mtl *MapTableLoader) GetMap(mapID int32) (*models.Map, bool) {
-	mtl.mu.RLock()
-	defer mtl.mu.RUnlock()
 	mapData, ok := mtl.maps[mapID]
 	return mapData, ok
 }
 
 // GetAllMaps 获取所有地图
 func (mtl *MapTableLoader) GetAllMaps() map[int32]*models.Map {
-	mtl.mu.RLock()
-	defer mtl.mu.RUnlock()
 	return mtl.maps
 }
 
 // GetSpawnPointsByMapID 根据地图ID获取生成点
 func (mtl *MapTableLoader) GetSpawnPointsByMapID(mapID int32) []*models.MapSpawnPoint {
-	mtl.mu.RLock()
-	defer mtl.mu.RUnlock()
-
 	var spawnPoints []*models.MapSpawnPoint
 	for _, sp := range mtl.spawnPoints {
 		if sp.MapID == mapID {
@@ -340,9 +312,6 @@ func (mtl *MapTableLoader) GetSpawnPointsByMapID(mapID int32) []*models.MapSpawn
 
 // GetTeleportPointsByMapID 根据地图ID获取传送点
 func (mtl *MapTableLoader) GetTeleportPointsByMapID(mapID int32) []*models.MapTeleportPoint {
-	mtl.mu.RLock()
-	defer mtl.mu.RUnlock()
-
 	var teleportPoints []*models.MapTeleportPoint
 	for _, tp := range mtl.teleportPoints {
 		if tp.MapID == mapID {
@@ -354,9 +323,6 @@ func (mtl *MapTableLoader) GetTeleportPointsByMapID(mapID int32) []*models.MapTe
 
 // GetBuildingsByMapID 根据地图ID获取建筑物
 func (mtl *MapTableLoader) GetBuildingsByMapID(mapID int32) []*models.MapBuilding {
-	mtl.mu.RLock()
-	defer mtl.mu.RUnlock()
-
 	var buildings []*models.MapBuilding
 	for _, b := range mtl.buildings {
 		if b.MapID == mapID {
@@ -368,9 +334,6 @@ func (mtl *MapTableLoader) GetBuildingsByMapID(mapID int32) []*models.MapBuildin
 
 // GetEventsByMapID 根据地图ID获取事件
 func (mtl *MapTableLoader) GetEventsByMapID(mapID int32) []*models.MapEvent {
-	mtl.mu.RLock()
-	defer mtl.mu.RUnlock()
-
 	var events []*models.MapEvent
 	for _, e := range mtl.events {
 		if e.MapID == mapID {
@@ -382,9 +345,6 @@ func (mtl *MapTableLoader) GetEventsByMapID(mapID int32) []*models.MapEvent {
 
 // GetResourcesByMapID 根据地图ID获取资源
 func (mtl *MapTableLoader) GetResourcesByMapID(mapID int32) []*models.MapResource {
-	mtl.mu.RLock()
-	defer mtl.mu.RUnlock()
-
 	var resources []*models.MapResource
 	for _, r := range mtl.resources {
 		if r.MapID == mapID {

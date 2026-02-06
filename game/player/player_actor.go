@@ -1,13 +1,15 @@
 package player
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zEngine/zEvent"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 	"go.uber.org/zap"
 )
 
@@ -18,7 +20,9 @@ const (
 
 type PlayerActor struct {
 	*zActor.BaseActor
-	Player *Player
+	Player  *Player
+	stopCh  chan struct{}
+	running atomic.Bool
 }
 
 func NewPlayerActor(playerID common.PlayerIdType, name string, session *zNet.TcpServerSession) *PlayerActor {
@@ -28,6 +32,7 @@ func NewPlayerActor(playerID common.PlayerIdType, name string, session *zNet.Tcp
 	actor := &PlayerActor{
 		BaseActor: baseActor,
 		Player:    player,
+		stopCh:    make(chan struct{}),
 	}
 
 	return actor
@@ -44,7 +49,7 @@ func (pa *PlayerActor) ProcessMessage(msg zActor.ActorMessage) {
 		}
 	case *PlayerActorMoveMessage:
 		if pa.Player != nil {
-			pa.Player.SetPosition(common.Vector3{X: typedMsg.X, Y: typedMsg.Y, Z: typedMsg.Z})
+			pa.Player.SetPosition(gamecommon.Vector3{X: typedMsg.X, Y: typedMsg.Y, Z: typedMsg.Z})
 		}
 	case *PlayerActorAddExpMessage:
 		if pa.Player != nil {
@@ -63,39 +68,57 @@ func (pa *PlayerActor) ProcessMessage(msg zActor.ActorMessage) {
 }
 
 func (pa *PlayerActor) Run() {
+	if !pa.running.CompareAndSwap(false, true) {
+		return
+	}
+
 	ticker := time.NewTicker(PlayerUpdateInterval)
 	defer ticker.Stop()
+	defer pa.running.Store(false)
 
 	for {
 		select {
-		case msg := <-pa.ActorMsgChan:
+		case msg, ok := <-pa.ActorMsgChan:
+			if !ok {
+				zLog.Debug("PlayerActor message channel closed, exiting",
+					zap.Int64("actorId", pa.ID()))
+				return
+			}
 			pa.ProcessMessage(msg)
 		case <-ticker.C:
-			pa.Player.Update(float64(PlayerUpdateInterval.Milliseconds()))
+			if pa.Player != nil {
+				pa.Player.Update(float64(PlayerUpdateInterval.Milliseconds()))
+			}
+		case <-pa.stopCh:
+			zLog.Debug("PlayerActor stop signal received, exiting",
+				zap.Int64("actorId", pa.ID()))
+			return
 		}
 	}
 }
 
 // Stop 重写Stop()方法，确保完整的资源清理
 func (pa *PlayerActor) Stop() error {
+	select {
+	case <-pa.stopCh:
+	default:
+		close(pa.stopCh)
+	}
+
 	if pa.Player != nil {
-		// 调用玩家的Logout()方法，处理玩家登出逻辑
 		pa.Player.Logout()
 
-		// 关闭玩家的会话（如果存在）
 		if session := pa.Player.GetSession(); session != nil {
 			session.Close()
 		}
 	}
 
-	// 调用父类的Stop()方法，关闭消息通道
 	err := pa.BaseActor.Stop()
 	if err != nil {
 		zLog.Error("Failed to stop base actor", zap.Int64("playerId", pa.ID()), zap.Error(err))
 		return err
 	}
 
-	// 记录玩家Actor停止
 	if pa.Player != nil {
 		zLog.Info("Player actor stopped",
 			zap.Int64("playerId", int64(pa.Player.GetPlayerId())),

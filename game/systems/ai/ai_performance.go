@@ -5,65 +5,59 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zObject"
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 )
 
-// VisionGrid 视野网格
 type VisionGrid struct {
-	GridSize   float32                  // 网格大小
-	GridCells  map[int64]map[int64]bool // 网格单元格
-	LastUpdate time.Time                // 最后更新时间
-	UpdateRate time.Duration            // 更新频率
+	GridSize   float32
+	GridCells  map[int64]map[int64]bool
+	LastUpdate time.Time
+	UpdateRate time.Duration
 }
 
-// PathNode 路径节点
 type PathNode struct {
-	Position common.Vector3 // 位置
-	Parent   *PathNode      // 父节点
-	G        float32        // 从起点到当前节点的代价
-	H        float32        // 从当前节点到目标的估计代价
-	F        float32        // 总代价
+	Position gamecommon.Vector3
+	Parent   *PathNode
+	G        float32
+	H        float32
+	F        float32
 }
 
-// GroupAI 群体AI
-type GroupAI struct {
-	GroupID    uint64          // 群体ID
-	Members    map[uint64]bool // 成员列表
-	LeaderID   uint64          // 领导者ID
-	TargetID   uint64          // 群体目标
-	Formation  string          // 阵型
-	LastAction time.Time       // 最后行动时间
-	Behavior   string          // 群体行为
+type TeamAI struct {
+	TeamID     common.TeamIdType
+	Members    map[common.ObjectIdType]bool
+	LeaderID   common.PlayerIdType
+	TargetID   common.ObjectIdType
+	Formation  string
+	LastAction time.Time
+	Behavior   string
 }
 
-// AIPerformanceManager AI性能管理器
 type AIPerformanceManager struct {
 	mu             sync.RWMutex
-	visionGrids    map[uint64]*VisionGrid // 视野网格
-	groupAIs       map[uint64]*GroupAI    // 群体AI
-	pathNodePool   *zObject.GenericPool   // 路径节点对象池
-	visionGridPool *zObject.GenericPool   // 视野网格对象池
-	groupAIPool    *zObject.GenericPool   // 群体AI对象池
+	visionGrids    map[common.MapIdType]*VisionGrid
+	teamAIs        map[common.TeamIdType]*TeamAI
+	pathNodePool   *zObject.GenericPool
+	visionGridPool *zObject.GenericPool
+	teamAIPool     *zObject.GenericPool
 }
 
-// NewAIPerformanceManager 创建AI性能管理器
 func NewAIPerformanceManager() *AIPerformanceManager {
 	return &AIPerformanceManager{
-		visionGrids:    make(map[uint64]*VisionGrid),
-		groupAIs:       make(map[uint64]*GroupAI),
+		visionGrids:    make(map[common.MapIdType]*VisionGrid),
+		teamAIs:        make(map[common.TeamIdType]*TeamAI),
 		pathNodePool:   zObject.NewGenericPool(func() interface{} { return &PathNode{} }, 1000),
 		visionGridPool: zObject.NewGenericPool(func() interface{} { return &VisionGrid{} }, 100),
-		groupAIPool:    zObject.NewGenericPool(func() interface{} { return &GroupAI{} }, 100),
+		teamAIPool:     zObject.NewGenericPool(func() interface{} { return &TeamAI{} }, 100),
 	}
 }
 
-// Init 初始化AI性能管理器
 func (apm *AIPerformanceManager) Init() error {
 	return nil
 }
 
-// GetVisionGrid 获取视野网格
-func (apm *AIPerformanceManager) GetVisionGrid(instanceID uint64) *VisionGrid {
+func (apm *AIPerformanceManager) GetVisionGrid(instanceID common.MapIdType) *VisionGrid {
 	apm.mu.RLock()
 	defer apm.mu.RUnlock()
 
@@ -91,13 +85,11 @@ func (apm *AIPerformanceManager) GetVisionGrid(instanceID uint64) *VisionGrid {
 	return grid
 }
 
-// updateVisionGrid 更新视野网格
 func (apm *AIPerformanceManager) updateVisionGrid(grid *VisionGrid) {
 	grid.LastUpdate = time.Now()
 }
 
-// IsVisible 检查是否可见
-func (apm *AIPerformanceManager) IsVisible(instanceID uint64, start, end common.Vector3) bool {
+func (apm *AIPerformanceManager) IsVisible(instanceID common.MapIdType, start, end gamecommon.Vector3) bool {
 	grid := apm.GetVisionGrid(instanceID)
 
 	startX := int64(start.X / grid.GridSize)
@@ -143,7 +135,6 @@ func (apm *AIPerformanceManager) IsVisible(instanceID uint64, start, end common.
 	return true
 }
 
-// abs 返回绝对值
 func abs(x int64) int64 {
 	if x < 0 {
 		return -x
@@ -151,10 +142,9 @@ func abs(x int64) int64 {
 	return x
 }
 
-// FindPath 寻找路径
-func (apm *AIPerformanceManager) FindPath(start, end common.Vector3, maxDistance float32) []common.Vector3 {
-	openSet := make(map[common.Vector3]*PathNode)
-	closedSet := make(map[common.Vector3]bool)
+func (apm *AIPerformanceManager) FindPath(start, end gamecommon.Vector3, maxDistance float32) []gamecommon.Vector3 {
+	openSet := make(map[gamecommon.Vector3]*PathNode)
+	closedSet := make(map[gamecommon.Vector3]bool)
 
 	startNode := apm.pathNodePool.Get().(*PathNode)
 	startNode.Position = start
@@ -210,10 +200,10 @@ func (apm *AIPerformanceManager) FindPath(start, end common.Vector3, maxDistance
 		}
 	}
 
-	path := make([]common.Vector3, 0)
+	path := make([]gamecommon.Vector3, 0)
 	if foundPath && current != nil {
 		for current != nil {
-			path = append([]common.Vector3{current.Position}, path...)
+			path = append([]gamecommon.Vector3{current.Position}, path...)
 			parent := current.Parent
 			apm.pathNodePool.Put(current)
 			current = parent
@@ -227,11 +217,10 @@ func (apm *AIPerformanceManager) FindPath(start, end common.Vector3, maxDistance
 	return path
 }
 
-// generateNeighbors 生成邻居节点
-func (apm *AIPerformanceManager) generateNeighbors(position common.Vector3) []common.Vector3 {
-	neighbors := make([]common.Vector3, 0, 8)
+func (apm *AIPerformanceManager) generateNeighbors(position gamecommon.Vector3) []gamecommon.Vector3 {
+	neighbors := make([]gamecommon.Vector3, 0, 8)
 
-	directions := []common.Vector3{
+	directions := []gamecommon.Vector3{
 		{X: 1, Y: 0, Z: 0},
 		{X: -1, Y: 0, Z: 0},
 		{X: 0, Y: 1, Z: 0},
@@ -250,138 +239,132 @@ func (apm *AIPerformanceManager) generateNeighbors(position common.Vector3) []co
 	return neighbors
 }
 
-// CreateGroupAI 创建群体AI
-func (apm *AIPerformanceManager) CreateGroupAI(members []uint64) uint64 {
+func (apm *AIPerformanceManager) CreateTeamAI(members []common.ObjectIdType) common.TeamIdType {
 	apm.mu.Lock()
 	defer apm.mu.Unlock()
 
-	groupID, err := common.GenerateGroupID()
+	teamID, err := common.GenerateTeamID()
 	if err != nil {
 		return 0
 	}
-	groupAI := apm.groupAIPool.Get().(*GroupAI)
-	groupAI.GroupID = uint64(groupID)
-	groupAI.Members = make(map[uint64]bool)
-	groupAI.LastAction = time.Now()
-	groupAI.Behavior = "normal"
+	teamAI := apm.teamAIPool.Get().(*TeamAI)
+	teamAI.TeamID = teamID
+	teamAI.Members = make(map[common.ObjectIdType]bool)
+	teamAI.LastAction = time.Now()
+	teamAI.Behavior = "normal"
 
 	for _, memberID := range members {
-		groupAI.Members[memberID] = true
+		teamAI.Members[memberID] = true
 	}
 
 	if len(members) > 0 {
-		groupAI.LeaderID = members[0]
+		teamAI.LeaderID = common.PlayerIdType(members[0])
 	}
 
-	apm.groupAIs[uint64(groupID)] = groupAI
-	return uint64(groupID)
+	apm.teamAIs[teamID] = teamAI
+	return teamID
 }
 
-// AddToGroup 添加到群体
-func (apm *AIPerformanceManager) AddToGroup(groupID, memberID uint64) bool {
+func (apm *AIPerformanceManager) AddToTeam(teamID common.TeamIdType, memberID common.ObjectIdType) bool {
 	apm.mu.Lock()
 	defer apm.mu.Unlock()
 
-	groupAI, exists := apm.groupAIs[groupID]
+	teamAI, exists := apm.teamAIs[teamID]
 	if !exists {
 		return false
 	}
 
-	groupAI.Members[memberID] = true
-	groupAI.LastAction = time.Now()
+	teamAI.Members[memberID] = true
+	teamAI.LastAction = time.Now()
 	return true
 }
 
-// RemoveFromGroup 从群体移除
-func (apm *AIPerformanceManager) RemoveFromGroup(groupID, memberID uint64) bool {
+func (apm *AIPerformanceManager) RemoveFromTeam(teamID common.TeamIdType, memberID common.ObjectIdType) bool {
 	apm.mu.Lock()
 	defer apm.mu.Unlock()
 
-	groupAI, exists := apm.groupAIs[groupID]
+	teamAI, exists := apm.teamAIs[teamID]
 	if !exists {
 		return false
 	}
 
-	delete(groupAI.Members, memberID)
-	groupAI.LastAction = time.Now()
+	delete(teamAI.Members, memberID)
+	teamAI.LastAction = time.Now()
 
-	if groupAI.LeaderID == memberID && len(groupAI.Members) > 0 {
-		for memberID := range groupAI.Members {
-			groupAI.LeaderID = memberID
+	if common.ObjectIdType(teamAI.LeaderID) == memberID && len(teamAI.Members) > 0 {
+		for memberID := range teamAI.Members {
+			teamAI.LeaderID = common.PlayerIdType(memberID)
 			break
 		}
 	}
 
-	if len(groupAI.Members) == 0 {
-		delete(apm.groupAIs, groupID)
-		apm.groupAIPool.Put(groupAI)
+	if len(teamAI.Members) == 0 {
+		delete(apm.teamAIs, teamID)
+		apm.teamAIPool.Put(teamAI)
 	}
 
 	return true
 }
 
-// SetGroupTarget 设置群体目标
-func (apm *AIPerformanceManager) SetGroupTarget(groupID, targetID uint64) bool {
+func (apm *AIPerformanceManager) SetTeamTarget(teamID common.TeamIdType, targetID common.ObjectIdType) bool {
 	apm.mu.Lock()
 	defer apm.mu.Unlock()
 
-	groupAI, exists := apm.groupAIs[groupID]
+	teamAI, exists := apm.teamAIs[teamID]
 	if !exists {
 		return false
 	}
 
-	groupAI.TargetID = targetID
-	groupAI.LastAction = time.Now()
+	teamAI.TargetID = targetID
+	teamAI.LastAction = time.Now()
 
 	return true
 }
 
-// UpdateGroupAI 更新群体AI
-func (apm *AIPerformanceManager) UpdateGroupAI(groupID uint64) {
+func (apm *AIPerformanceManager) UpdateTeamAI(teamID common.TeamIdType) {
 	apm.mu.Lock()
 	defer apm.mu.Unlock()
 
-	groupAI, exists := apm.groupAIs[groupID]
+	teamAI, exists := apm.teamAIs[teamID]
 	if !exists {
 		return
 	}
 
 	currentTime := time.Now()
-	if currentTime.Sub(groupAI.LastAction) < 100*time.Millisecond {
+	if currentTime.Sub(teamAI.LastAction) < 100*time.Millisecond {
 		return
 	}
 
-	switch groupAI.Behavior {
+	switch teamAI.Behavior {
 	case "attack":
-		apm.updateAttackBehavior(groupAI)
+		apm.updateAttackBehavior(teamAI)
 	case "defend":
-		apm.updateDefendBehavior(groupAI)
+		apm.updateDefendBehavior(teamAI)
 	case "patrol":
-		apm.updatePatrolBehavior(groupAI)
+		apm.updatePatrolBehavior(teamAI)
 	}
 
-	groupAI.LastAction = currentTime
+	teamAI.LastAction = currentTime
 }
 
-// updateAttackBehavior 更新攻击行为
-func (apm *AIPerformanceManager) updateAttackBehavior(groupAI *GroupAI) {
-	if groupAI.TargetID == 0 {
+func (apm *AIPerformanceManager) updateAttackBehavior(teamAI *TeamAI) {
+	if teamAI.TargetID == 0 {
 		return
 	}
 
-	target := apm.getGameObject(groupAI.TargetID)
+	target := apm.getGameObject(teamAI.TargetID)
 	if target == nil {
 		return
 	}
 
-	leader := apm.getGameObject(groupAI.LeaderID)
+	leader := apm.getGameObject(common.ObjectIdType(teamAI.LeaderID))
 	if leader == nil {
 		return
 	}
 
 	memberIndex := 0
-	for memberID := range groupAI.Members {
-		if memberID == groupAI.LeaderID {
+	for memberID := range teamAI.Members {
+		if memberID == common.ObjectIdType(teamAI.LeaderID) {
 			continue
 		}
 
@@ -389,46 +372,41 @@ func (apm *AIPerformanceManager) updateAttackBehavior(groupAI *GroupAI) {
 	}
 }
 
-// updateDefendBehavior 更新防御行为
-func (apm *AIPerformanceManager) updateDefendBehavior(groupAI *GroupAI) {
+func (apm *AIPerformanceManager) updateDefendBehavior(teamAI *TeamAI) {
 }
 
-// updatePatrolBehavior 更新巡逻行为
-func (apm *AIPerformanceManager) updatePatrolBehavior(groupAI *GroupAI) {
+func (apm *AIPerformanceManager) updatePatrolBehavior(teamAI *TeamAI) {
 }
 
-// GetGroupAI 获取群体AI
-func (apm *AIPerformanceManager) GetGroupAI(groupID uint64) (*GroupAI, bool) {
+func (apm *AIPerformanceManager) GetTeamAI(teamID common.TeamIdType) (*TeamAI, bool) {
 	apm.mu.RLock()
 	defer apm.mu.RUnlock()
 
-	groupAI, exists := apm.groupAIs[groupID]
-	return groupAI, exists
+	teamAI, exists := apm.teamAIs[teamID]
+	return teamAI, exists
 }
 
-// CleanupExpiredGroups 清理过期的群体
-func (apm *AIPerformanceManager) CleanupExpiredGroups() {
+func (apm *AIPerformanceManager) CleanupExpiredTeams() {
 	apm.mu.Lock()
 	defer apm.mu.Unlock()
 
 	currentTime := time.Now()
-	expiredGroups := make([]uint64, 0)
+	expiredTeams := make([]common.TeamIdType, 0)
 
-	for groupID, groupAI := range apm.groupAIs {
-		if currentTime.Sub(groupAI.LastAction) > 5*time.Minute {
-			expiredGroups = append(expiredGroups, groupID)
+	for teamID, teamAI := range apm.teamAIs {
+		if currentTime.Sub(teamAI.LastAction) > 5*time.Minute {
+			expiredTeams = append(expiredTeams, teamID)
 		}
 	}
 
-	for _, groupID := range expiredGroups {
-		if groupAI, exists := apm.groupAIs[groupID]; exists {
-			delete(apm.groupAIs, groupID)
-			apm.groupAIPool.Put(groupAI)
+	for _, teamID := range expiredTeams {
+		if teamAI, exists := apm.teamAIs[teamID]; exists {
+			delete(apm.teamAIs, teamID)
+			apm.teamAIPool.Put(teamAI)
 		}
 	}
 }
 
-// getGameObject 获取游戏对象
-func (apm *AIPerformanceManager) getGameObject(objectID uint64) common.IGameObject {
+func (apm *AIPerformanceManager) getGameObject(objectID common.ObjectIdType) gamecommon.IGameObject {
 	return nil
 }

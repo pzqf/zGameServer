@@ -1,43 +1,41 @@
 package npc
 
 import (
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object"
 	"github.com/pzqf/zGameServer/game/object/component"
 )
 
 // NPCType NPC类型定义
 const (
-	NPCTypeCommon     = 1 // 普通NPC
-	NPCTypeMerchant   = 2 // 商人
+	NPCTypeCommon     = 1 // 普通NPC（无特殊功能）
+	NPCTypeMerchant   = 2 // 商人（出售物品）
 	NPCTypeQuestGiver = 3 // 任务发布者
-	NPCTypeTrainer    = 4 // 训练师
-	NPCTypeHealer     = 5 // 治疗师
-	NPCTypeGuard      = 6 // 守卫
+	NPCTypeTrainer    = 4 // 训练师（学习技能）
+	NPCTypeHealer     = 5 // 治疗师（恢复生命魔法）
+	NPCTypeGuard      = 6 // 守卫（攻击敌对目标）
 )
 
 // NPC 非玩家角色类
+// 游戏中的NPC实体，继承自LivingObject
 type NPC struct {
 	*object.LivingObject
-	aiBehavior   *AIBehavior
-	npcType      int
-	interaction  *InteractionSystem
-	dialogueTree *DialogueTree
+	aiBehavior   *AIBehavior        // AI行为组件
+	npcType      int                // NPC类型（NPCType*）
+	interaction  *InteractionSystem // 交互系统组件
+	dialogueTree *DialogueTree      // 对话树组件
 }
 
 // AIBehavior NPC AI行为
+// 管理NPC的AI状态和行为参数
 type AIBehavior struct {
 	*component.BaseComponent
-	// AI状态：静止、巡逻、跟随、战斗
-	state string
-	// 感知范围
-	perceptionRange float32
-	// 巡逻路径
-	patrolPath []object.Vector3
-	// 当前巡逻点
-	currentPatrolPoint int
-	// 是否可移动
-	isMovable bool
+	state              string           // AI状态（stationary/patrol/follow/combat）
+	perceptionRange    float32          // 感知范围
+	patrolPath         []object.Vector3 // 巡逻路径
+	currentPatrolPoint int              // 当前巡逻点索引
+	isMovable          bool             // 是否可移动
 }
 
 // Init 初始化AI行为组件
@@ -100,11 +98,12 @@ func (ai *AIBehavior) SetMovable(movable bool) {
 }
 
 // InteractionSystem 交互系统
+// 管理NPC的交互功能
 type InteractionSystem struct {
 	*component.BaseComponent
-	interactDistance float32
-	isInteractable   bool
-	interactionType  string
+	interactDistance float32 // 交互距离
+	isInteractable   bool    // 是否可交互
+	interactionType  string  // 交互类型（dialogue/trade/quest等）
 }
 
 // Init 初始化交互系统
@@ -147,12 +146,13 @@ func (isys *InteractionSystem) SetInteractionType(interactionType string) {
 }
 
 // DialogueTree 对话树
+// 管理NPC的对话内容和选项
 type DialogueTree struct {
 	*component.BaseComponent
-	dialogueId       int32
-	dialogueContent  string
-	dialogueOptions  []string
-	dialogueBranches map[int]int32
+	dialogueId       int32         // 对话ID
+	dialogueContent  string        // 对话内容
+	dialogueOptions  []string      // 对话选项
+	dialogueBranches map[int]int32 // 对话分支（选项索引 -> 下一个对话ID）
 }
 
 // Init 初始化对话树
@@ -210,21 +210,24 @@ func (dt *DialogueTree) SetActive(active bool) {
 }
 
 // NewNPC 创建新的NPC对象
+// 参数:
+//   - id: NPC对象ID
+//   - name: NPC名称
+//   - npcType: NPC类型
+//
+// 返回: 新创建的NPC对象
 func NewNPC(id common.ObjectIdType, name string, npcType int) *NPC {
-	// 创建基础生命对象
 	livingObj := object.NewLivingObject(id, name)
 
-	// 创建AI行为组件
 	aiBehavior := &AIBehavior{
 		BaseComponent:      component.NewBaseComponent("ai"),
-		state:              "stationary", // 默认静止状态
+		state:              "stationary",
 		perceptionRange:    10.0,
 		patrolPath:         make([]object.Vector3, 0),
 		currentPatrolPoint: 0,
 		isMovable:          false,
 	}
 
-	// 创建交互系统
 	interaction := &InteractionSystem{
 		BaseComponent:    component.NewBaseComponent("interaction"),
 		interactDistance: 3.0,
@@ -232,7 +235,6 @@ func NewNPC(id common.ObjectIdType, name string, npcType int) *NPC {
 		interactionType:  "dialogue",
 	}
 
-	// 创建对话树
 	dialogueTree := &DialogueTree{
 		BaseComponent:    component.NewBaseComponent("dialogue"),
 		dialogueId:       1,
@@ -241,7 +243,6 @@ func NewNPC(id common.ObjectIdType, name string, npcType int) *NPC {
 		dialogueBranches: make(map[int]int32),
 	}
 
-	// 创建NPC对象
 	npc := &NPC{
 		LivingObject: livingObj,
 		aiBehavior:   aiBehavior,
@@ -250,7 +251,6 @@ func NewNPC(id common.ObjectIdType, name string, npcType int) *NPC {
 		dialogueTree: dialogueTree,
 	}
 
-	// 添加组件到游戏对象
 	npc.AddComponentWithName("ai", aiBehavior)
 	npc.AddComponentWithName("interaction", interaction)
 	npc.AddComponentWithName("dialogue", dialogueTree)
@@ -273,20 +273,21 @@ func (n *NPC) GetAIState() string {
 	return n.aiBehavior.state
 }
 
-// GetInteraction 获取交互系统
+// GetInteraction 获取交互系统组件
 func (n *NPC) GetInteraction() *InteractionSystem {
 	return n.interaction
 }
 
-// GetDialogueTree 获取对话树
+// GetDialogueTree 获取对话树组件
 func (n *NPC) GetDialogueTree() *DialogueTree {
 	return n.dialogueTree
 }
 
-// Interact 交互
-func (n *NPC) Interact(player common.IGameObject) {
+// Interact 与NPC交互
+// 参数:
+//   - player: 交互的玩家对象
+func (n *NPC) Interact(player gamecommon.IGameObject) {
 	if n.interaction != nil && n.interaction.isInteractable {
 		// 执行交互逻辑
-		// 这里可以触发对话、交易等交互行为
 	}
 }

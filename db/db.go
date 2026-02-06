@@ -3,18 +3,31 @@ package db
 import (
 	"sync"
 
+	"github.com/pzqf/zEngine/zInject"
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/db/connector"
-	"github.com/pzqf/zGameServer/db/dao"
+	"github.com/pzqf/zGameServer/db/di"
 	"github.com/pzqf/zGameServer/db/repository"
 )
 
-// DBManager 数据库管理器
 type DBManager struct {
-	connectors          map[string]connector.DBConnector
-	CharacterRepository repository.CharacterRepository
-	AccountRepository   repository.AccountRepository
-	LoginLogRepository  repository.LoginLogRepository
+	container             zInject.Container
+	connectors            map[string]connector.DBConnector
+	PlayerRepository      repository.PlayerRepository
+	AccountRepository     repository.AccountRepository
+	PlayerItemRepository  repository.PlayerItemRepository
+	PlayerSkillRepository repository.PlayerSkillRepository
+	PlayerMailRepository  repository.PlayerMailRepository
+	PlayerQuestRepository repository.PlayerQuestRepository
+	PlayerPetRepository   repository.PlayerPetRepository
+	PlayerBuffRepository  repository.PlayerBuffRepository
+	GuildRepository       repository.GuildRepository
+	GuildMemberRepository repository.GuildMemberRepository
+	AuctionRepository     repository.AuctionRepository
+	LoginLogRepository    repository.LoginLogRepository
+	MailLogRepository     repository.MailLogRepository
+	QuestLogRepository    repository.QuestLogRepository
+	AuctionLogRepository  repository.AuctionLogRepository
 }
 
 var (
@@ -22,7 +35,7 @@ var (
 	dbOnce    sync.Once
 )
 
-func GetDBManager() *DBManager {
+func GetMgr() *DBManager {
 	return dbManager
 }
 
@@ -30,6 +43,7 @@ func InitDBManager() error {
 	var err error
 	dbOnce.Do(func() {
 		dbManager = &DBManager{
+			container:  zInject.NewContainer(),
 			connectors: make(map[string]connector.DBConnector),
 		}
 		err = dbManager.Init()
@@ -37,45 +51,44 @@ func InitDBManager() error {
 	return err
 }
 
-// Init 初始化数据库连接和所有Repository
 func (manager *DBManager) Init() error {
-	// 获取所有数据库配置
 	dbConfigs := config.GetAllDBConfigs()
 
-	// 初始化所有数据库连接器
 	for dbName, dbConfig := range dbConfigs {
-		// 创建数据库连接器
 		conn := connector.NewDBConnector(dbName, dbConfig.Driver, 1000)
-
-		// 初始化数据库连接
 		conn.Init(dbConfig)
-
-		// 启动数据库连接器
 		if err := conn.Start(); err != nil {
 			return err
 		}
-
-		// 存储连接器
 		manager.connectors[dbName] = conn
 	}
 
-	// 初始化所有DAO
-	var accountDAO *dao.AccountDAO
+	di.RegisterConnectors(manager.container, manager.connectors)
+	di.RegisterDAOs(manager.container)
+	di.RegisterRepositories(manager.container)
 
-	// AccountDAO使用account数据库
-	if accountConn, ok := manager.connectors["account"]; ok {
-		accountDAO = dao.NewAccountDAO(accountConn)
-	}
-
-	// 初始化所有Repository
-	if accountDAO != nil {
-		manager.AccountRepository = repository.NewAccountRepository(accountDAO)
-	}
-
+	manager.initRepositories()
 	return nil
 }
 
-// Close 关闭所有数据库连接
+func (manager *DBManager) initRepositories() {
+	manager.AccountRepository = di.ResolveRepo[repository.AccountRepository](manager.container, di.RepoAccount)
+	manager.PlayerRepository = di.ResolveRepo[repository.PlayerRepository](manager.container, di.RepoPlayer)
+	manager.PlayerItemRepository = di.ResolveRepo[repository.PlayerItemRepository](manager.container, di.RepoPlayerItem)
+	manager.PlayerSkillRepository = di.ResolveRepo[repository.PlayerSkillRepository](manager.container, di.RepoPlayerSkill)
+	manager.PlayerMailRepository = di.ResolveRepo[repository.PlayerMailRepository](manager.container, di.RepoPlayerMail)
+	manager.PlayerQuestRepository = di.ResolveRepo[repository.PlayerQuestRepository](manager.container, di.RepoPlayerQuest)
+	manager.PlayerPetRepository = di.ResolveRepo[repository.PlayerPetRepository](manager.container, di.RepoPlayerPet)
+	manager.PlayerBuffRepository = di.ResolveRepo[repository.PlayerBuffRepository](manager.container, di.RepoPlayerBuff)
+	manager.GuildRepository = di.ResolveRepo[repository.GuildRepository](manager.container, di.RepoGuild)
+	manager.GuildMemberRepository = di.ResolveRepo[repository.GuildMemberRepository](manager.container, di.RepoGuildMember)
+	manager.AuctionRepository = di.ResolveRepo[repository.AuctionRepository](manager.container, di.RepoAuction)
+	manager.LoginLogRepository = di.ResolveRepo[repository.LoginLogRepository](manager.container, di.RepoLoginLog)
+	manager.MailLogRepository = di.ResolveRepo[repository.MailLogRepository](manager.container, di.RepoMailLog)
+	manager.QuestLogRepository = di.ResolveRepo[repository.QuestLogRepository](manager.container, di.RepoQuestLog)
+	manager.AuctionLogRepository = di.ResolveRepo[repository.AuctionLogRepository](manager.container, di.RepoAuctionLog)
+}
+
 func (manager *DBManager) Close() error {
 	for _, conn := range manager.connectors {
 		if err := conn.Close(); err != nil {
@@ -85,12 +98,14 @@ func (manager *DBManager) Close() error {
 	return nil
 }
 
-// GetConnector 获取指定名称的数据库连接器
 func (manager *DBManager) GetConnector(dbName string) connector.DBConnector {
 	return manager.connectors[dbName]
 }
 
-// GetAllConnectors 获取所有数据库连接器
 func (manager *DBManager) GetAllConnectors() map[string]connector.DBConnector {
 	return manager.connectors
+}
+
+func (manager *DBManager) GetContainer() zInject.Container {
+	return manager.container
 }

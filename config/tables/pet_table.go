@@ -1,15 +1,12 @@
 package tables
 
 import (
-	"sync"
-
 	"github.com/pzqf/zGameServer/config/models"
 )
 
 // PetTableLoader 宠物表加载器
 type PetTableLoader struct {
-	mu   sync.RWMutex
-	pets map[int32]*models.Pet
+	pets map[int32]*models.Pet // 宠物配置映射
 }
 
 // NewPetTableLoader 创建宠物表加载器
@@ -28,7 +25,6 @@ func (ptl *PetTableLoader) Load(dir string) error {
 		TableName:  "pets",
 	}
 
-	// 使用临时map批量加载数据，减少锁竞争
 	tempPets := make(map[int32]*models.Pet)
 
 	err := ReadExcelFile(config, dir, func(row []string) error {
@@ -49,11 +45,8 @@ func (ptl *PetTableLoader) Load(dir string) error {
 		return nil
 	})
 
-	// 批量写入到目标map，只需加一次锁
 	if err == nil {
-		ptl.mu.Lock()
 		ptl.pets = tempPets
-		ptl.mu.Unlock()
 	}
 
 	return err
@@ -66,20 +59,15 @@ func (ptl *PetTableLoader) GetTableName() string {
 
 // GetPet 根据ID获取宠物配置
 func (ptl *PetTableLoader) GetPet(petID int32) (*models.Pet, bool) {
-	ptl.mu.RLock()
 	pet, ok := ptl.pets[petID]
-	ptl.mu.RUnlock()
 	return pet, ok
 }
 
 // GetAllPets 获取所有宠物配置
 func (ptl *PetTableLoader) GetAllPets() map[int32]*models.Pet {
-	ptl.mu.RLock()
-	// 创建一个副本，避免外部修改内部数据
 	petsCopy := make(map[int32]*models.Pet, len(ptl.pets))
 	for id, pet := range ptl.pets {
 		petsCopy[id] = pet
 	}
-	ptl.mu.RUnlock()
 	return petsCopy
 }

@@ -24,6 +24,9 @@ var (
 	ErrClockMovedBack    = errors.New("clock moved backwards")
 )
 
+// Snowflake 分布式ID生成器
+// 基于Twitter的Snowflake算法，生成64位有序唯一ID
+// ID结构: 时间戳(41位) + 数据中心ID(5位) + 工作节点ID(5位) + 序列号(12位)
 type Snowflake struct {
 	mu           sync.Mutex
 	workerID     int64
@@ -33,6 +36,8 @@ type Snowflake struct {
 	epoch        int64
 }
 
+// NewSnowflake 创建Snowflake实例
+// workerID: 工作节点ID(0-31), datacenterID: 数据中心ID(0-31)
 func NewSnowflake(workerID, datacenterID int64) (*Snowflake, error) {
 	if workerID < 0 || workerID > maxWorkerID {
 		return nil, ErrInvalidWorkerID
@@ -50,6 +55,7 @@ func NewSnowflake(workerID, datacenterID int64) (*Snowflake, error) {
 	}, nil
 }
 
+// NextID 生成下一个唯一ID
 func (s *Snowflake) NextID() (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -79,6 +85,7 @@ func (s *Snowflake) NextID() (int64, error) {
 	return id, nil
 }
 
+// waitNextMillis 等待下一个毫秒，避免时钟回拨
 func (s *Snowflake) waitNextMillis(lastTime int64) int64 {
 	currentTime := time.Now().UnixNano() / 1e6
 	for currentTime <= lastTime {
@@ -87,6 +94,7 @@ func (s *Snowflake) waitNextMillis(lastTime int64) int64 {
 	return currentTime
 }
 
+// ParseID 解析ID，提取时间戳、数据中心ID、工作节点ID和序列号
 func (s *Snowflake) ParseID(id int64) (timestamp, datacenterID, workerID, sequence int64) {
 	sequence = id & sequenceMask
 	workerID = (id >> workerIDShift) & maxWorkerID

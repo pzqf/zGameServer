@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/pzqf/zGameServer/config/models"
 )
 
 // TableManager 表格配置管理器
+// 管理所有配置表格的加载和访问
 type TableManager struct {
-	mu                sync.RWMutex
 	itemLoader        *ItemTableLoader
 	mapLoader         *MapTableLoader
 	skillLoader       *SkillTableLoader
@@ -21,6 +23,7 @@ type TableManager struct {
 	petLoader         *PetTableLoader
 	buffLoader        *BuffTableLoader
 	aiLoader          *AITableLoader
+	spawnPointLoader  *SpawnPointTableLoader
 	loaders           []TableLoaderInterface
 	initialized       bool
 }
@@ -44,6 +47,7 @@ func NewTableManager() *TableManager {
 	petLoader := NewPetTableLoader()
 	buffLoader := NewBuffTableLoader()
 	aiLoader := NewAITableLoader()
+	spawnPointLoader := NewSpawnPointTableLoader()
 
 	return &TableManager{
 		itemLoader:        itemLoader,
@@ -57,6 +61,7 @@ func NewTableManager() *TableManager {
 		petLoader:         petLoader,
 		buffLoader:        buffLoader,
 		aiLoader:          aiLoader,
+		spawnPointLoader:  spawnPointLoader,
 		loaders: []TableLoaderInterface{
 			itemLoader,
 			mapLoader,
@@ -69,12 +74,14 @@ func NewTableManager() *TableManager {
 			petLoader,
 			buffLoader,
 			aiLoader,
+			spawnPointLoader,
 		},
 		initialized: false,
 	}
 }
 
 // GetTableManager 获取全局表格配置管理器实例
+// 使用单例模式确保全局只有一个实例
 func GetTableManager() *TableManager {
 	if GlobalTableManager == nil {
 		tableOnce.Do(func() {
@@ -85,6 +92,8 @@ func GetTableManager() *TableManager {
 }
 
 // LoadAllTables 加载所有配置表格
+// 从resources/excel_tables目录加载所有Excel配置文件
+// 返回: 加载过程中的错误
 func (tm *TableManager) LoadAllTables() error {
 	rootDir, err := os.Getwd()
 	if err != nil {
@@ -156,6 +165,16 @@ func (tm *TableManager) GetBuffLoader() *BuffTableLoader {
 // GetAILoader 获取AI表格加载器
 func (tm *TableManager) GetAILoader() *AITableLoader {
 	return tm.aiLoader
+}
+
+// GetSpawnPointLoader 获取刷新点表格加载器
+func (tm *TableManager) GetSpawnPointLoader() *SpawnPointTableLoader {
+	return tm.spawnPointLoader
+}
+
+// GetSpawnPointsByMap 获取指定地图的刷新点列表
+func (tm *TableManager) GetSpawnPointsByMap(mapID int32) []*models.SpawnPoint {
+	return tm.spawnPointLoader.GetSpawnPointsByMap(mapID)
 }
 
 // IsInitialized 检查表格是否已经初始化

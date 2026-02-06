@@ -4,6 +4,7 @@ import (
 	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zEngine/zEvent"
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zGameServer/common"
 	"go.uber.org/zap"
 )
 
@@ -36,36 +37,36 @@ const (
 // GuildActorCreateMessage 创建公会消息
 type GuildActorCreateMessage struct {
 	zActor.BaseActorMessage
-	GuildId    int64
+	GuildId    common.GuildIdType
 	GuildName  string
-	LeaderId   int64
+	LeaderId   common.PlayerIdType
 	LeaderName string
 }
 
 // GuildActorJoinMessage 加入公会消息
 type GuildActorJoinMessage struct {
 	zActor.BaseActorMessage
-	PlayerId   int64
+	PlayerId   common.PlayerIdType
 	PlayerName string
 }
 
 // GuildActorLeaveMessage 离开公会消息
 type GuildActorLeaveMessage struct {
 	zActor.BaseActorMessage
-	PlayerId int64
+	PlayerId common.PlayerIdType
 }
 
 // GuildActorKickMessage 踢出公会消息
 type GuildActorKickMessage struct {
 	zActor.BaseActorMessage
-	PlayerId int64
+	PlayerId common.PlayerIdType
 	Reason   string
 }
 
 // GuildActorSetPositionMessage 设置职位消息
 type GuildActorSetPositionMessage struct {
 	zActor.BaseActorMessage
-	PlayerId    int64
+	PlayerId    common.PlayerIdType
 	NewPosition int
 }
 
@@ -78,14 +79,14 @@ type GuildActorUpdateNoticeMessage struct {
 // GuildActorUpgradeMessage 升级公会消息
 type GuildActorUpgradeMessage struct {
 	zActor.BaseActorMessage
-	OperatorId int64
+	OperatorId common.PlayerIdType
 }
 
 // GuildActorApplyMessage 申请加入公会消息
 type GuildActorApplyMessage struct {
 	zActor.BaseActorMessage
 	ApplyId    int64
-	PlayerId   int64
+	PlayerId   common.PlayerIdType
 	PlayerName string
 	Remark     string
 }
@@ -101,7 +102,7 @@ type GuildActorProcessApplyMessage struct {
 // GuildActorUpdateContributionMessage 更新贡献消息
 type GuildActorUpdateContributionMessage struct {
 	zActor.BaseActorMessage
-	PlayerId int64
+	PlayerId common.PlayerIdType
 	Amount   int64
 }
 
@@ -157,7 +158,6 @@ func (ga *GuildActor) ProcessMessage(msg zActor.ActorMessage) {
 
 // handleCreateMessage 处理创建公会消息
 func (ga *GuildActor) handleCreateMessage(msg *GuildActorCreateMessage) {
-	// 创建公会
 	guild, err := ga.Service.CreateGuild(msg.GuildId, msg.GuildName, msg.LeaderId, msg.LeaderName)
 	if err != nil {
 		zLog.Error("Failed to create guild", zap.Error(err))
@@ -165,9 +165,8 @@ func (ga *GuildActor) handleCreateMessage(msg *GuildActorCreateMessage) {
 	}
 
 	ga.Guild = guild
-	zLog.Info("Guild created (Actor)", zap.Int64("guildId", msg.GuildId), zap.String("guildName", msg.GuildName))
+	zLog.Info("Guild created (Actor)", zap.Int64("guildId", int64(msg.GuildId)), zap.String("guildName", msg.GuildName))
 
-	// 发布公会创建事件
 	ga.publishEvent(zEvent.EventType(EventGuildCreate), map[string]interface{}{
 		"guildId":    msg.GuildId,
 		"guildName":  msg.GuildName,
@@ -183,16 +182,14 @@ func (ga *GuildActor) handleJoinMessage(msg *GuildActorJoinMessage) {
 		return
 	}
 
-	// 加入公会
-	err := ga.Service.JoinGuild(msg.PlayerId, msg.PlayerName, ga.Guild.GuildId)
+	err := ga.Service.JoinGuild(msg.PlayerId, msg.PlayerName, common.GuildIdType(ga.Guild.GuildId))
 	if err != nil {
 		zLog.Error("Failed to join guild", zap.Error(err))
 		return
 	}
 
-	zLog.Info("Player joined guild (Actor)", zap.Int64("playerId", msg.PlayerId), zap.Int64("guildId", ga.Guild.GuildId))
+	zLog.Info("Player joined guild (Actor)", zap.Int64("playerId", int64(msg.PlayerId)), zap.Int64("guildId", int64(ga.Guild.GuildId)))
 
-	// 发布加入公会事件
 	ga.publishEvent(zEvent.EventType(EventGuildJoin), map[string]interface{}{
 		"guildId":    ga.Guild.GuildId,
 		"playerId":   msg.PlayerId,
@@ -207,16 +204,14 @@ func (ga *GuildActor) handleLeaveMessage(msg *GuildActorLeaveMessage) {
 		return
 	}
 
-	// 离开公会
 	err := ga.Service.LeaveGuild(msg.PlayerId)
 	if err != nil {
 		zLog.Error("Failed to leave guild", zap.Error(err))
 		return
 	}
 
-	zLog.Info("Player left guild (Actor)", zap.Int64("playerId", msg.PlayerId), zap.Int64("guildId", ga.Guild.GuildId))
+	zLog.Info("Player left guild (Actor)", zap.Int64("playerId", int64(msg.PlayerId)), zap.Int64("guildId", int64(ga.Guild.GuildId)))
 
-	// 发布离开公会事件
 	ga.publishEvent(zEvent.EventType(EventGuildLeave), map[string]interface{}{
 		"guildId":  ga.Guild.GuildId,
 		"playerId": msg.PlayerId,
@@ -230,16 +225,14 @@ func (ga *GuildActor) handleKickMessage(msg *GuildActorKickMessage) {
 		return
 	}
 
-	// 踢出公会
-	err := ga.Service.KickGuildMember(ga.Guild.LeaderId, msg.PlayerId, msg.Reason)
+	err := ga.Service.KickGuildMember(common.PlayerIdType(ga.Guild.LeaderId), msg.PlayerId, msg.Reason)
 	if err != nil {
 		zLog.Error("Failed to kick guild member", zap.Error(err))
 		return
 	}
 
-	zLog.Info("Player kicked from guild (Actor)", zap.Int64("playerId", msg.PlayerId), zap.Int64("guildId", ga.Guild.GuildId))
+	zLog.Info("Player kicked from guild (Actor)", zap.Int64("playerId", int64(msg.PlayerId)), zap.Int64("guildId", int64(ga.Guild.GuildId)))
 
-	// 发布踢出公会事件
 	ga.publishEvent(zEvent.EventType(EventGuildKick), map[string]interface{}{
 		"guildId":  ga.Guild.GuildId,
 		"playerId": msg.PlayerId,
@@ -254,16 +247,14 @@ func (ga *GuildActor) handleSetPositionMessage(msg *GuildActorSetPositionMessage
 		return
 	}
 
-	// 设置职位
-	err := ga.Service.SetGuildMemberPosition(ga.Guild.LeaderId, msg.PlayerId, msg.NewPosition)
+	err := ga.Service.SetGuildMemberPosition(common.PlayerIdType(ga.Guild.LeaderId), msg.PlayerId, msg.NewPosition)
 	if err != nil {
 		zLog.Error("Failed to set guild member position", zap.Error(err))
 		return
 	}
 
-	zLog.Info("Guild member position updated (Actor)", zap.Int64("playerId", msg.PlayerId), zap.Int("newPosition", msg.NewPosition))
+	zLog.Info("Guild member position updated (Actor)", zap.Int64("playerId", int64(msg.PlayerId)), zap.Int("newPosition", msg.NewPosition))
 
-	// 发布职位变更事件
 	ga.publishEvent(zEvent.EventType(EventGuildPositionChange), map[string]interface{}{
 		"guildId":     ga.Guild.GuildId,
 		"playerId":    msg.PlayerId,
@@ -278,16 +269,14 @@ func (ga *GuildActor) handleUpdateNoticeMessage(msg *GuildActorUpdateNoticeMessa
 		return
 	}
 
-	// 更新公告
-	err := ga.Service.UpdateGuildNotice(ga.Guild.LeaderId, msg.Notice)
+	err := ga.Service.UpdateGuildNotice(common.PlayerIdType(ga.Guild.LeaderId), msg.Notice)
 	if err != nil {
 		zLog.Error("Failed to update guild notice", zap.Error(err))
 		return
 	}
 
-	zLog.Info("Guild notice updated (Actor)", zap.Int64("guildId", ga.Guild.GuildId))
+	zLog.Info("Guild notice updated (Actor)", zap.Int64("guildId", int64(ga.Guild.GuildId)))
 
-	// 发布公告更新事件
 	ga.publishEvent(zEvent.EventType(EventGuildNoticeUpdate), map[string]interface{}{
 		"guildId": ga.Guild.GuildId,
 		"notice":  msg.Notice,
@@ -301,22 +290,19 @@ func (ga *GuildActor) handleUpgradeMessage(msg *GuildActorUpgradeMessage) {
 		return
 	}
 
-	// 升级公会
 	err := ga.Service.UpgradeGuild(msg.OperatorId)
 	if err != nil {
 		zLog.Error("Failed to upgrade guild", zap.Error(err))
 		return
 	}
 
-	// 重新获取公会信息
-	guild, _ := ga.Service.GetGuild(ga.Guild.GuildId)
+	guild, _ := ga.Service.GetGuild(common.GuildIdType(ga.Guild.GuildId))
 	if guild != nil {
 		ga.Guild = guild
 	}
 
-	zLog.Info("Guild upgraded (Actor)", zap.Int64("guildId", ga.Guild.GuildId), zap.Int("newLevel", ga.Guild.Level))
+	zLog.Info("Guild upgraded (Actor)", zap.Int64("guildId", int64(ga.Guild.GuildId)), zap.Int("newLevel", ga.Guild.Level))
 
-	// 发布公会升级事件
 	ga.publishEvent(zEvent.EventType(EventGuildUpgrade), map[string]interface{}{
 		"guildId":    ga.Guild.GuildId,
 		"newLevel":   ga.Guild.Level,
@@ -331,14 +317,13 @@ func (ga *GuildActor) handleApplyMessage(msg *GuildActorApplyMessage) {
 		return
 	}
 
-	// 申请加入公会
-	err := ga.Service.ApplyGuild(msg.ApplyId, msg.PlayerId, msg.PlayerName, ga.Guild.GuildId, msg.Remark)
+	err := ga.Service.ApplyGuild(msg.ApplyId, msg.PlayerId, msg.PlayerName, common.GuildIdType(ga.Guild.GuildId), msg.Remark)
 	if err != nil {
 		zLog.Error("Failed to apply for guild", zap.Error(err))
 		return
 	}
 
-	zLog.Info("Guild application submitted (Actor)", zap.Int64("applyId", msg.ApplyId), zap.Int64("playerId", msg.PlayerId))
+	zLog.Info("Guild application submitted (Actor)", zap.Int64("applyId", msg.ApplyId), zap.Int64("playerId", int64(msg.PlayerId)))
 
 	// 发布申请加入公会事件
 	ga.publishEvent(zEvent.EventType(EventGuildApply), map[string]interface{}{
@@ -357,7 +342,6 @@ func (ga *GuildActor) handleProcessApplyMessage(msg *GuildActorProcessApplyMessa
 		return
 	}
 
-	// 处理公会申请
 	err := ga.Service.ProcessGuildApply(ga.Guild.LeaderId, msg.ApplyId, msg.Accept, msg.Remark)
 	if err != nil {
 		zLog.Error("Failed to process guild application", zap.Error(err))
@@ -366,7 +350,6 @@ func (ga *GuildActor) handleProcessApplyMessage(msg *GuildActorProcessApplyMessa
 
 	zLog.Info("Guild application processed (Actor)", zap.Int64("applyId", msg.ApplyId), zap.Bool("accepted", msg.Accept))
 
-	// 发布处理公会申请事件
 	ga.publishEvent(zEvent.EventType(EventGuildProcessApply), map[string]interface{}{
 		"applyId":  msg.ApplyId,
 		"accepted": msg.Accept,
@@ -382,20 +365,18 @@ func (ga *GuildActor) handleUpdateContributionMessage(msg *GuildActorUpdateContr
 		return
 	}
 
-	// 更新贡献
-	err := ga.Service.UpdateGuildMemberContribution(msg.PlayerId, msg.Amount)
+	err := ga.Service.UpdateGuildMemberContribution(common.PlayerIdType(msg.PlayerId), msg.Amount)
 	if err != nil {
 		zLog.Error("Failed to update guild member contribution", zap.Error(err))
 		return
 	}
 
-	// 重新获取公会信息
 	guild, _ := ga.Service.GetGuild(ga.Guild.GuildId)
 	if guild != nil {
 		ga.Guild = guild
 	}
 
-	zLog.Info("Guild member contribution updated (Actor)", zap.Int64("playerId", msg.PlayerId), zap.Int64("amount", msg.Amount))
+	zLog.Info("Guild member contribution updated (Actor)", zap.Int64("playerId", int64(msg.PlayerId)), zap.Int64("amount", msg.Amount))
 
 	// 发布贡献更新事件
 	ga.publishEvent(zEvent.EventType(EventGuildContributionUpdate), map[string]interface{}{

@@ -4,16 +4,16 @@ import (
 	"time"
 )
 
-// LoginLog 角色登录/登出日志模型，映射login_log表
 type LoginLog struct {
-	LogID     int64     `db:"log_id"`
-	CharID    int64     `db:"char_id"`
-	CharName  string    `db:"char_name"`
-	OpType    int       `db:"op_type"`
-	CreatedAt time.Time `db:"created_at"`
+	LogID      int64     `db:"log_id" bson:"log_id"`
+	PlayerID   int64     `db:"player_id" bson:"player_id"`
+	PlayerName string    `db:"player_name" bson:"player_name"`
+	OpType     int32     `db:"op_type" bson:"op_type"`
+	IP         string    `db:"ip" bson:"ip"`
+	Device     string    `db:"device" bson:"device"`
+	CreatedAt  time.Time `db:"created_at" bson:"created_at"`
 }
 
-// TableName 返回表名
 func (LoginLog) TableName() string {
-	return "login_log"
+	return "`login_logs`"
 }

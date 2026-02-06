@@ -1,18 +1,17 @@
 package tables
 
 import (
-	"sync"
-
 	"github.com/pzqf/zGameServer/config/models"
 )
 
 // SkillTableLoader 技能表格加载器
+// 负责从Excel加载技能配置数据
 type SkillTableLoader struct {
-	mu     sync.RWMutex
-	skills map[int32]*models.Skill
+	skills map[int32]*models.Skill // 技能配置映射（技能ID -> 配置）
 }
 
 // NewSkillTableLoader 创建技能表格加载器
+// 返回: 初始化后的技能表加载器实例
 func NewSkillTableLoader() *SkillTableLoader {
 	return &SkillTableLoader{
 		skills: make(map[int32]*models.Skill),
@@ -20,6 +19,11 @@ func NewSkillTableLoader() *SkillTableLoader {
 }
 
 // Load 加载技能表数据
+// 从skill.xlsx文件读取技能配置
+// 参数:
+//   - dir: Excel文件所在目录
+//
+// 返回: 加载错误
 func (stl *SkillTableLoader) Load(dir string) error {
 	config := ExcelConfig{
 		FileName:   "skill.xlsx",
@@ -28,7 +32,7 @@ func (stl *SkillTableLoader) Load(dir string) error {
 		TableName:  "skills",
 	}
 
-	// 使用临时map批量加载数据，减少锁竞争
+	// 使用临时map批量加载数据
 	tempSkills := make(map[int32]*models.Skill)
 
 	err := ReadExcelFile(config, dir, func(row []string) error {
@@ -68,37 +72,38 @@ func (stl *SkillTableLoader) Load(dir string) error {
 		return nil
 	})
 
-	// 批量写入到目标map，只需加一次锁
+	// 加载完成后一次性赋值
 	if err == nil {
-		stl.mu.Lock()
 		stl.skills = tempSkills
-		stl.mu.Unlock()
 	}
 
 	return err
 }
 
 // GetTableName 获取表格名称
+// 返回: 表格名称"skills"
 func (stl *SkillTableLoader) GetTableName() string {
 	return "skills"
 }
 
 // GetSkill 根据ID获取技能
+// 参数:
+//   - skillID: 技能ID
+//
+// 返回: 技能配置和是否存在
 func (stl *SkillTableLoader) GetSkill(skillID int32) (*models.Skill, bool) {
-	stl.mu.RLock()
 	skill, ok := stl.skills[skillID]
-	stl.mu.RUnlock()
 	return skill, ok
 }
 
 // GetAllSkills 获取所有技能
+// 返回配置的副本map，避免外部修改内部数据
+// 返回: 技能配置映射副本
 func (stl *SkillTableLoader) GetAllSkills() map[int32]*models.Skill {
-	stl.mu.RLock()
 	// 创建一个副本，避免外部修改内部数据
 	skillsCopy := make(map[int32]*models.Skill, len(stl.skills))
 	for id, skill := range stl.skills {
 		skillsCopy[id] = skill
 	}
-	stl.mu.RUnlock()
 	return skillsCopy
 }

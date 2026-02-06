@@ -4,8 +4,8 @@ import (
 	"sync"
 
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zGameServer/common"
 	"github.com/pzqf/zGameServer/event"
-	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"

@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/pzqf/zEngine/zEvent"
+	"github.com/pzqf/zGameServer/common"
 )
 
 // IComponent 组件接口
@@ -29,7 +30,7 @@ type IComponent interface {
 // IGameObject 所有游戏对象的最基本行为接口
 type IGameObject interface {
 	// 获取唯一标识
-	GetID() ObjectIdType
+	GetID() common.ObjectIdType
 	// 获取名称
 	GetName() string
 	// 获取对象类型
@@ -63,15 +64,17 @@ type IGameObject interface {
 // IMap 地图接口
 type IMap interface {
 	// 获取地图ID
-	GetID() MapIdType
+	GetID() common.MapIdType
 	// 获取地图名称
 	GetName() string
 	// 获取指定范围内的对象
 	GetObjectsInRange(pos Vector3, radius float32) []IGameObject
+	// 获取指定类型的对象
+	GetObjectsByType(objectType GameObjectType) []IGameObject
 	// 添加对象
 	AddObject(object IGameObject)
 	// 移除对象
-	RemoveObject(objectID ObjectIdType)
+	RemoveObject(objectID common.ObjectIdType)
 	// 移动对象
 	MoveObject(object IGameObject, targetPos Vector3) error
 	// 传送对象

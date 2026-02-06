@@ -5,89 +5,77 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zObject"
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
 )
 
-// SkillEffectType 技能效果类型
 type SkillEffectType string
 
 const (
-	SkillEffectTypeDamage    SkillEffectType = "damage"    // 伤害
-	SkillEffectTypeHeal      SkillEffectType = "heal"      // 治疗
-	SkillEffectTypeBuff      SkillEffectType = "buff"      // 增益
-	SkillEffectTypeDebuff    SkillEffectType = "debuff"    // 减益
-	SkillEffectTypeStun      SkillEffectType = "stun"      // 眩晕
-	SkillEffectTypeKnockback SkillEffectType = "knockback" // 击退
-	SkillEffectTypeTeleport  SkillEffectType = "teleport"  // 传送
-	SkillEffectTypeSummon    SkillEffectType = "summon"    // 召唤
-	SkillEffectTypeArea      SkillEffectType = "area"      // 区域效果
-	SkillEffectTypeCombo     SkillEffectType = "combo"     // 连击
+	SkillEffectTypeDamage    SkillEffectType = "damage"
+	SkillEffectTypeHeal      SkillEffectType = "heal"
+	SkillEffectTypeBuff      SkillEffectType = "buff"
+	SkillEffectTypeDebuff    SkillEffectType = "debuff"
+	SkillEffectTypeStun      SkillEffectType = "stun"
+	SkillEffectTypeKnockback SkillEffectType = "knockback"
+	SkillEffectTypeTeleport  SkillEffectType = "teleport"
+	SkillEffectTypeSummon    SkillEffectType = "summon"
+	SkillEffectTypeArea      SkillEffectType = "area"
+	SkillEffectTypeCombo     SkillEffectType = "combo"
 )
 
-// SkillEffect 技能效果
 type SkillEffect struct {
-	EffectID   int32                  // 效果ID
-	Type       SkillEffectType        // 效果类型
-	Value      float32                // 效果值
-	Duration   float32                // 持续时间（秒）
-	Range      float32                // 效果范围
-	TargetType string                 // 目标类型
-	Properties map[string]interface{} // 附加属性
+	EffectID   int32
+	Type       SkillEffectType
+	Value      float32
+	Duration   float32
+	Range      float32
+	TargetType string
+	Properties map[string]interface{}
 }
 
-// SkillCombo 技能连击
 type SkillCombo struct {
-	ComboID     uint64    // 连击ID
-	OwnerID     uint64    // 所有者ID
-	SkillIDs    []int32   // 连击技能序列
-	CurrentStep int       // 当前步骤
-	LastUsed    time.Time // 最后使用时间
-	ExpiryTime  time.Time // 过期时间
-	Bonus       float32   // 连击奖励系数
+	ComboID     common.ComboIdType
+	OwnerID     common.ObjectIdType
+	SkillIDs    []int32
+	CurrentStep int
+	LastUsed    time.Time
+	ExpiryTime  time.Time
+	Bonus       float32
 }
 
-// SkillEffectSystem 技能效果系统
 type SkillEffectSystem struct {
 	mu             sync.RWMutex
-	effects        map[uint64][]*SkillEffect // 活跃效果
-	effectPool     *zObject.GenericPool      // 效果对象池
-	combos         map[uint64]*SkillCombo    // 活跃连击
-	comboPool      *zObject.GenericPool      // 连击对象池
-	effectsBySkill map[int32][]*SkillEffect  // 技能效果映射
+	effects        map[common.ObjectIdType][]*SkillEffect
+	effectPool     *zObject.GenericPool
+	combos         map[common.ComboIdType]*SkillCombo
+	comboPool      *zObject.GenericPool
+	effectsBySkill map[int32][]*SkillEffect
 }
 
-// GlobalSkillEffectSystem 全局技能效果系统
 var GlobalSkillEffectSystem *SkillEffectSystem
 
-// init 初始化全局技能效果系统
 func init() {
 	GlobalSkillEffectSystem = &SkillEffectSystem{
-		effects:        make(map[uint64][]*SkillEffect),
+		effects:        make(map[common.ObjectIdType][]*SkillEffect),
 		effectPool:     zObject.NewGenericPool(func() interface{} { return &SkillEffect{} }, 1000),
-		combos:         make(map[uint64]*SkillCombo),
+		combos:         make(map[common.ComboIdType]*SkillCombo),
 		comboPool:      zObject.NewGenericPool(func() interface{} { return &SkillCombo{} }, 1000),
 		effectsBySkill: make(map[int32][]*SkillEffect),
 	}
 }
 
-// Init 初始化技能效果系统
 func (ses *SkillEffectSystem) Init() error {
-	// 加载技能效果配置
 	if err := ses.loadSkillEffects(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// loadSkillEffects 加载技能效果配置
 func (ses *SkillEffectSystem) loadSkillEffects() error {
-	// 从技能配置中加载效果
-	// 这里可以根据实际配置格式加载
 	return nil
 }
 
-// AddSkillEffect 添加技能效果
-func (ses *SkillEffectSystem) AddSkillEffect(ownerID uint64, effect *SkillEffect) {
+func (ses *SkillEffectSystem) AddSkillEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 	if effect == nil {
 		return
 	}
@@ -95,15 +83,12 @@ func (ses *SkillEffectSystem) AddSkillEffect(ownerID uint64, effect *SkillEffect
 	ses.mu.Lock()
 	defer ses.mu.Unlock()
 
-	// 添加到效果列表
 	ses.effects[ownerID] = append(ses.effects[ownerID], effect)
 
-	// 应用效果
 	ses.applySkillEffect(ownerID, effect)
 }
 
-// applySkillEffect 应用技能效果
-func (ses *SkillEffectSystem) applySkillEffect(ownerID uint64, effect *SkillEffect) {
+func (ses *SkillEffectSystem) applySkillEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 	switch effect.Type {
 	case SkillEffectTypeDamage:
 		ses.applyDamageEffect(ownerID, effect)
@@ -128,68 +113,38 @@ func (ses *SkillEffectSystem) applySkillEffect(ownerID uint64, effect *SkillEffe
 	}
 }
 
-// applyDamageEffect 应用伤害效果
-func (ses *SkillEffectSystem) applyDamageEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用伤害
-	// 这里需要调用战斗系统
+func (ses *SkillEffectSystem) applyDamageEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyHealEffect 应用治疗效果
-func (ses *SkillEffectSystem) applyHealEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用治疗
-	// 这里需要调用属性系统
+func (ses *SkillEffectSystem) applyHealEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyBuffEffect 应用增益效果
-func (ses *SkillEffectSystem) applyBuffEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用增益
-	// 这里需要调用Buff系统
+func (ses *SkillEffectSystem) applyBuffEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyDebuffEffect 应用减益效果
-func (ses *SkillEffectSystem) applyDebuffEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用减益
-	// 这里需要调用Buff系统
+func (ses *SkillEffectSystem) applyDebuffEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyStunEffect 应用眩晕效果
-func (ses *SkillEffectSystem) applyStunEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用眩晕
-	// 这里需要调用状态系统
+func (ses *SkillEffectSystem) applyStunEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyKnockbackEffect 应用击退效果
-func (ses *SkillEffectSystem) applyKnockbackEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用击退
-	// 这里需要调用移动系统
+func (ses *SkillEffectSystem) applyKnockbackEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyTeleportEffect 应用传送效果
-func (ses *SkillEffectSystem) applyTeleportEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用传送
-	// 这里需要调用移动系统
+func (ses *SkillEffectSystem) applyTeleportEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applySummonEffect 应用召唤效果
-func (ses *SkillEffectSystem) applySummonEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用召唤
-	// 这里需要调用对象系统
+func (ses *SkillEffectSystem) applySummonEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyAreaEffect 应用区域效果
-func (ses *SkillEffectSystem) applyAreaEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用区域效果
-	// 这里需要调用地图系统
+func (ses *SkillEffectSystem) applyAreaEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 }
 
-// applyComboEffect 应用连击效果
-func (ses *SkillEffectSystem) applyComboEffect(ownerID uint64, effect *SkillEffect) {
-	// 应用连击
+func (ses *SkillEffectSystem) applyComboEffect(ownerID common.ObjectIdType, effect *SkillEffect) {
 	ses.processCombo(ownerID, effect)
 }
 
-// StartCombo 开始连击
-func (ses *SkillEffectSystem) StartCombo(ownerID uint64, skillIDs []int32) uint64 {
+func (ses *SkillEffectSystem) StartCombo(ownerID common.ObjectIdType, skillIDs []int32) common.ComboIdType {
 	ses.mu.Lock()
 	defer ses.mu.Unlock()
 
@@ -198,24 +153,22 @@ func (ses *SkillEffectSystem) StartCombo(ownerID uint64, skillIDs []int32) uint6
 	if err != nil {
 		return 0
 	}
-	combo.ComboID = uint64(comboID)
+	combo.ComboID = comboID
 	combo.OwnerID = ownerID
 	combo.SkillIDs = skillIDs
 	combo.CurrentStep = 0
 	combo.LastUsed = time.Now()
-	combo.ExpiryTime = time.Now().Add(5 * time.Second) // 5秒过期
+	combo.ExpiryTime = time.Now().Add(5 * time.Second)
 	combo.Bonus = 1.0
 
-	ses.combos[uint64(comboID)] = combo
-	return uint64(comboID)
+	ses.combos[comboID] = combo
+	return comboID
 }
 
-// ContinueCombo 继续连击
-func (ses *SkillEffectSystem) ContinueCombo(ownerID uint64, skillID int32) bool {
+func (ses *SkillEffectSystem) ContinueCombo(ownerID common.ObjectIdType, skillID int32) bool {
 	ses.mu.Lock()
 	defer ses.mu.Unlock()
 
-	// 查找活跃的连击
 	var targetCombo *SkillCombo
 	for _, combo := range ses.combos {
 		if combo.OwnerID == ownerID && time.Now().Before(combo.ExpiryTime) {
@@ -225,7 +178,6 @@ func (ses *SkillEffectSystem) ContinueCombo(ownerID uint64, skillID int32) bool 
 	}
 
 	if targetCombo == nil {
-		// 没有活跃连击，开始新连击
 		comboID := ses.StartCombo(ownerID, []int32{skillID})
 		combo := ses.combos[comboID]
 		combo.CurrentStep = 1
@@ -234,40 +186,30 @@ func (ses *SkillEffectSystem) ContinueCombo(ownerID uint64, skillID int32) bool 
 		return true
 	}
 
-	// 检查是否是连击的下一个技能
 	if targetCombo.CurrentStep < len(targetCombo.SkillIDs) && targetCombo.SkillIDs[targetCombo.CurrentStep] == skillID {
-		// 继续连击
 		targetCombo.CurrentStep++
 		targetCombo.LastUsed = time.Now()
 		targetCombo.ExpiryTime = time.Now().Add(5 * time.Second)
-		targetCombo.Bonus += 0.1 // 每次连击增加10%伤害
+		targetCombo.Bonus += 0.1
 
-		// 检查是否完成连击
 		if targetCombo.CurrentStep >= len(targetCombo.SkillIDs) {
-			// 连击完成，应用奖励
 			ses.applyComboBonus(ownerID, targetCombo)
 		}
 
 		return true
 	}
 
-	// 不是连击的下一个技能，开始新连击
 	ses.StartCombo(ownerID, []int32{skillID})
 	return false
 }
 
-// processCombo 处理连击
-func (ses *SkillEffectSystem) processCombo(ownerID uint64, effect *SkillEffect) {
+func (ses *SkillEffectSystem) processCombo(ownerID common.ObjectIdType, effect *SkillEffect) {
 	ses.ContinueCombo(ownerID, effect.Properties["skill_id"].(int32))
 }
 
-// applyComboBonus 应用连击奖励
-func (ses *SkillEffectSystem) applyComboBonus(ownerID uint64, combo *SkillCombo) {
-	// 应用连击奖励
-	// 这里可以增加伤害、减少冷却等
+func (ses *SkillEffectSystem) applyComboBonus(ownerID common.ObjectIdType, combo *SkillCombo) {
 }
 
-// GetSkillEffects 获取技能效果
 func (ses *SkillEffectSystem) GetSkillEffects(skillID int32) []*SkillEffect {
 	ses.mu.RLock()
 	defer ses.mu.RUnlock()
@@ -277,7 +219,6 @@ func (ses *SkillEffectSystem) GetSkillEffects(skillID int32) []*SkillEffect {
 		return nil
 	}
 
-	// 创建副本
 	effectsCopy := make([]*SkillEffect, len(effects))
 	for i, effect := range effects {
 		effectsCopy[i] = effect
@@ -286,7 +227,6 @@ func (ses *SkillEffectSystem) GetSkillEffects(skillID int32) []*SkillEffect {
 	return effectsCopy
 }
 
-// AddSkillEffectToSkill 为技能添加效果
 func (ses *SkillEffectSystem) AddSkillEffectToSkill(skillID int32, effect *SkillEffect) {
 	ses.mu.Lock()
 	defer ses.mu.Unlock()
@@ -294,14 +234,12 @@ func (ses *SkillEffectSystem) AddSkillEffectToSkill(skillID int32, effect *Skill
 	ses.effectsBySkill[skillID] = append(ses.effectsBySkill[skillID], effect)
 }
 
-// Update 更新技能效果系统
 func (ses *SkillEffectSystem) Update() {
 	ses.mu.Lock()
 	defer ses.mu.Unlock()
 
 	currentTime := time.Now()
 
-	// 清理过期的效果
 	for ownerID, effects := range ses.effects {
 		validEffects := make([]*SkillEffect, 0)
 		for _, effect := range effects {
@@ -319,8 +257,7 @@ func (ses *SkillEffectSystem) Update() {
 		}
 	}
 
-	// 清理过期的连击
-	expiredCombos := make([]uint64, 0)
+	expiredCombos := make([]common.ComboIdType, 0)
 	for comboID, combo := range ses.combos {
 		if currentTime.After(combo.ExpiryTime) {
 			expiredCombos = append(expiredCombos, comboID)
@@ -334,7 +271,6 @@ func (ses *SkillEffectSystem) Update() {
 	}
 }
 
-// CleanupExpiredEffects 清理过期效果
 func (ses *SkillEffectSystem) CleanupExpiredEffects() {
 	ses.Update()
 }

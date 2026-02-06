@@ -2,34 +2,31 @@ package monster
 
 import (
 	"github.com/pzqf/zEngine/zScript"
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object"
 	"github.com/pzqf/zGameServer/game/object/component"
 )
 
 // Monster 怪物类
+// 游戏中的怪物实体，继承自LivingObject
 type Monster struct {
 	*object.LivingObject
-	aiBehavior   *AIBehavior
-	dropConfig   *DropConfig
-	scriptHolder *zScript.ScriptHolder
+	aiBehavior   *AIBehavior           // AI行为组件
+	dropConfig   *DropConfig           // 掉落配置组件
+	scriptHolder *zScript.ScriptHolder // 脚本持有者
 }
 
 // AIBehavior 怪物AI行为
+// 管理怪物的AI状态和行为参数
 type AIBehavior struct {
 	*component.BaseComponent
-	// AI状态：巡逻、追击、战斗、逃跑
-	state string
-	// 巡逻路径
-	patrolPath []object.Vector3
-	// 当前巡逻点
-	currentPatrolPoint int
-	// 感知范围
-	perceptionRange float32
-	// 追击范围
-	chaseRange float32
-	// 逃跑范围
-	runawayRange float32
+	state              string           // AI状态（patrol/chase/combat/runaway）
+	patrolPath         []object.Vector3 // 巡逻路径
+	currentPatrolPoint int              // 当前巡逻点索引
+	perceptionRange    float32          // 感知范围（发现玩家的距离）
+	chaseRange         float32          // 追击范围（最大追击距离）
+	runawayRange       float32          // 逃跑范围（超出后返回巡逻）
 }
 
 // Init 初始化AI行为组件
@@ -116,16 +113,18 @@ func (ai *AIBehavior) SetRunawayRange(range_ float32) {
 }
 
 // GetAttackRange 获取攻击范围
+// 返回固定的攻击距离
 func (ai *AIBehavior) GetAttackRange() float32 {
 	return 2.5
 }
 
 // DropConfig 掉落配置
+// 管理怪物的掉落物品和奖励
 type DropConfig struct {
 	*component.BaseComponent
-	dropItems map[int32]float32 // 物品ID -> 掉落概率
-	exp       int32             // 经验值
-	gold      int32             // 金币
+	dropItems map[int32]float32 // 掉落物品映射（物品ID -> 掉落概率）
+	exp       int32             // 击杀获得经验
+	gold      int32             // 击杀获得金币
 }
 
 // Init 初始化掉落配置组件
@@ -182,14 +181,17 @@ func (dc *DropConfig) SetGold(gold int32) {
 }
 
 // NewMonster 创建新的怪物对象
+// 参数:
+//   - id: 怪物对象ID
+//   - name: 怪物名称
+//
+// 返回: 新创建的怪物对象
 func NewMonster(id common.ObjectIdType, name string) *Monster {
-	// 创建基础生命对象
 	livingObj := object.NewLivingObject(id, name)
 
-	// 创建AI行为组件
 	aiBehavior := &AIBehavior{
 		BaseComponent:      component.NewBaseComponent("ai"),
-		state:              "patrol", // 默认巡逻状态
+		state:              "patrol",
 		patrolPath:         make([]object.Vector3, 0),
 		currentPatrolPoint: 0,
 		perceptionRange:    10.0,
@@ -197,7 +199,6 @@ func NewMonster(id common.ObjectIdType, name string) *Monster {
 		runawayRange:       5.0,
 	}
 
-	// 创建掉落配置组件
 	dropConfig := &DropConfig{
 		BaseComponent: component.NewBaseComponent("drop"),
 		dropItems:     make(map[int32]float32),
@@ -205,10 +206,8 @@ func NewMonster(id common.ObjectIdType, name string) *Monster {
 		gold:          50,
 	}
 
-	// 创建脚本持有者
 	scriptHolder := &zScript.ScriptHolder{}
 
-	// 创建怪物对象
 	monster := &Monster{
 		LivingObject: livingObj,
 		aiBehavior:   aiBehavior,
@@ -216,7 +215,6 @@ func NewMonster(id common.ObjectIdType, name string) *Monster {
 		scriptHolder: scriptHolder,
 	}
 
-	// 添加组件
 	monster.AddComponentWithName("ai", aiBehavior)
 	monster.AddComponentWithName("drop", dropConfig)
 
@@ -224,16 +222,16 @@ func NewMonster(id common.ObjectIdType, name string) *Monster {
 }
 
 // GetType 获取怪物类型
-func (m *Monster) GetType() int {
-	return int(common.GameObjectTypeMonster)
+func (m *Monster) GetType() gamecommon.GameObjectType {
+	return gamecommon.GameObjectTypeMonster
 }
 
-// GetAIBehavior 获取AI行为
+// GetAIBehavior 获取AI行为组件
 func (m *Monster) GetAIBehavior() *AIBehavior {
 	return m.aiBehavior
 }
 
-// GetDropConfig 获取掉落配置
+// GetDropConfig 获取掉落配置组件
 func (m *Monster) GetDropConfig() *DropConfig {
 	return m.dropConfig
 }
@@ -249,6 +247,10 @@ func (m *Monster) SetScriptHolder(holder *zScript.ScriptHolder) {
 }
 
 // BindScript 绑定脚本
+// 参数:
+//   - scriptFilename: 脚本文件名
+//
+// 返回: 绑定错误
 func (m *Monster) BindScript(scriptFilename string) error {
 	err := m.scriptHolder.BindScript(scriptFilename)
 	if err != nil {
@@ -259,11 +261,17 @@ func (m *Monster) BindScript(scriptFilename string) error {
 }
 
 // UpdateAI 更新AI
+// 参数:
+//   - deltaTime: 时间增量（毫秒）
 func (m *Monster) UpdateAI(deltaTime int) {
 	m.scriptHolder.Update(deltaTime)
 }
 
 // InitAI 初始化AI
+// 参数:
+//   - scriptFilename: 脚本文件名（可选）
+//
+// 返回: 初始化错误
 func (m *Monster) InitAI(scriptFilename string) error {
 	if scriptFilename != "" {
 		err := m.BindScript(scriptFilename)
@@ -272,4 +280,9 @@ func (m *Monster) InitAI(scriptFilename string) error {
 		}
 	}
 	return nil
+}
+
+// SetOnDeath 设置死亡回调
+func (m *Monster) SetOnDeath(callback func()) {
+	m.LivingObject.SetOnDeath(callback)
 }

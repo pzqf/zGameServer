@@ -4,35 +4,49 @@ import (
 	"sync/atomic"
 
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zGameServer/common"
 	"github.com/pzqf/zGameServer/event"
-	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object/component"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 // Item 物品结构
+// 表示背包中的一个物品实例
 type Item struct {
-	itemId     int64
-	itemType   int
-	itemName   string
-	count      atomic.Int32
-	maxStack   int
-	bind       bool
-	quality    int
-	levelReq   int
-	properties *zMap.Map // 物品属性
+	itemId     int64       // 物品ID（对应配置表）
+	itemType   int         // 物品类型（武器/防具/消耗品等）
+	itemName   string      // 物品名称
+	count      atomic.Int32 // 物品数量（原子操作）
+	maxStack   int         // 最大堆叠数量
+	bind       bool        // 是否绑定
+	quality    int         // 品质等级
+	levelReq   int         // 使用等级要求
+	properties *zMap.Map   // 物品属性（攻击力、防御力等）
 }
 
 // Inventory 背包系统
+// 管理玩家的物品存储
 type Inventory struct {
 	*component.BaseComponent
-	playerId int64
-	items    *zMap.Map // key: int(slot), value: *Item
-	size     int
+	playerId int64       // 所属玩家ID
+	items    *zMap.Map   // 物品映射表（槽位 -> 物品）
+	size     int         // 背包容量（槽位数量）
 }
 
 // NewItem 创建新物品
+// 参数:
+//   - itemId: 物品ID
+//   - itemType: 物品类型
+//   - itemName: 物品名称
+//   - count: 数量
+//   - maxStack: 最大堆叠
+//   - bind: 是否绑定
+//   - quality: 品质
+//   - levelReq: 等级要求
+//
+// 返回:
+//   - *Item: 新创建的物品
 func NewItem(itemId int64, itemType int, itemName string, count int, maxStack int, bind bool, quality int, levelReq int) *Item {
 	item := &Item{
 		itemId:     itemId,
@@ -44,41 +58,54 @@ func NewItem(itemId int64, itemType int, itemName string, count int, maxStack in
 		levelReq:   levelReq,
 		properties: zMap.NewMap(),
 	}
-	// 初始化原子字段
 	item.count.Store(int32(count))
 	return item
 }
 
+// NewInventory 创建背包组件
+// 参数:
+//   - playerId: 玩家ID
+//
+// 返回:
+//   - *Inventory: 新创建的背包
 func NewInventory(playerId common.PlayerIdType) *Inventory {
 	return &Inventory{
 		BaseComponent: component.NewBaseComponent("inventory"),
 		playerId:      int64(playerId),
 		items:         zMap.NewMap(),
-		size:          60, // 默认背包大小
+		size:          60, // 默认背包大小60格
 	}
 }
 
+// Init 初始化背包组件
+// 返回: 初始化错误
 func (inv *Inventory) Init() error {
-	// 初始化背包
 	zLog.Debug("Initializing inventory", zap.Int64("playerId", inv.playerId))
 	return nil
 }
 
 // Destroy 销毁背包组件
+// 清理所有物品数据
 func (inv *Inventory) Destroy() {
-	// 清理背包资源
 	zLog.Debug("Destroying inventory", zap.Int64("playerId", inv.playerId))
 	inv.items.Clear()
 }
 
 // AddItem 添加物品到背包
+// 优先尝试堆叠到已有物品，否则放入空槽位
+// 参数:
+//   - item: 要添加的物品
+//
+// 返回:
+//   - int: 放置的槽位（0表示失败）
+//   - error: 添加错误
 func (inv *Inventory) AddItem(item *Item) (int, error) {
 	// 检查物品是否可以堆叠
 	if item.count.Load() > 0 && item.maxStack > 1 {
-		// 查找可堆叠的物品槽位
 		var stackableSlot int
 		var availableSpace int
 
+		// 查找可堆叠的物品槽位
 		inv.items.Range(func(key, value interface{}) bool {
 			existingItem := value.(*Item)
 			if existingItem.itemId == item.itemId && existingItem.bind == item.bind {
@@ -90,14 +117,12 @@ func (inv *Inventory) AddItem(item *Item) (int, error) {
 		})
 
 		if stackableSlot != 0 && availableSpace > 0 {
-			// 堆叠物品
 			existingItemInterface, _ := inv.items.Load(stackableSlot)
 			existingItem := existingItemInterface.(*Item)
 
 			if int(item.count.Load()) <= availableSpace {
 				// 完全堆叠
 				existingItem.count.Add(item.count.Load())
-				// 发布物品增加事件
 				eventData := &event.PlayerItemEventData{
 					PlayerID: inv.playerId,
 					ItemID:   item.itemId,
@@ -109,7 +134,6 @@ func (inv *Inventory) AddItem(item *Item) (int, error) {
 			} else {
 				// 部分堆叠，剩余部分寻找新槽位
 				existingItem.count.Store(int32(existingItem.maxStack))
-				// 发布堆叠物品增加事件
 				eventData := &event.PlayerItemEventData{
 					PlayerID: inv.playerId,
 					ItemID:   item.itemId,
@@ -125,9 +149,7 @@ func (inv *Inventory) AddItem(item *Item) (int, error) {
 	// 查找空槽位放置剩余物品
 	for slot := 1; slot <= inv.size; slot++ {
 		if _, exists := inv.items.Load(slot); !exists {
-			// 添加到空槽位
 			inv.items.Store(slot, item)
-			// 发布物品增加事件
 			eventData := &event.PlayerItemEventData{
 				PlayerID: inv.playerId,
 				ItemID:   item.itemId,
@@ -143,10 +165,16 @@ func (inv *Inventory) AddItem(item *Item) (int, error) {
 }
 
 // RemoveItem 从背包移除物品
+// 参数:
+//   - slot: 槽位
+//   - count: 移除数量
+//
+// 返回:
+//   - error: 移除错误
 func (inv *Inventory) RemoveItem(slot int, count int) error {
 	item, exists := inv.items.Load(slot)
 	if !exists {
-		return nil // 槽位为空
+		return nil
 	}
 
 	existingItem := item.(*Item)
@@ -154,18 +182,15 @@ func (inv *Inventory) RemoveItem(slot int, count int) error {
 	removeCount := count
 	if currentCount <= count {
 		removeCount = currentCount
-		// 移除整个物品
 		inv.items.Delete(slot)
 	} else {
-		// 减少物品数量
 		existingItem.count.Add(-int32(count))
 	}
 
-	// 发布物品移除事件
 	eventData := &event.PlayerItemEventData{
 		PlayerID: inv.playerId,
 		ItemID:   existingItem.itemId,
-		Count:    -removeCount, // 使用负数表示减少
+		Count:    -removeCount,
 		Slot:     slot,
 	}
 	event.GetGlobalEventBus().Publish(event.NewEvent(event.EventPlayerItemRemove, inv, eventData))
@@ -174,6 +199,12 @@ func (inv *Inventory) RemoveItem(slot int, count int) error {
 }
 
 // GetItem 获取背包中的物品
+// 参数:
+//   - slot: 槽位
+//
+// 返回:
+//   - *Item: 物品
+//   - bool: 是否存在
 func (inv *Inventory) GetItem(slot int) (*Item, bool) {
 	item, exists := inv.items.Load(slot)
 	if !exists {
@@ -183,6 +214,7 @@ func (inv *Inventory) GetItem(slot int) (*Item, bool) {
 }
 
 // GetAllItems 获取背包中所有物品
+// 返回: 物品列表
 func (inv *Inventory) GetAllItems() []*Item {
 	var items []*Item
 	inv.items.Range(func(key, value interface{}) bool {
@@ -195,6 +227,10 @@ func (inv *Inventory) GetAllItems() []*Item {
 }
 
 // Expand 扩展背包
+// 参数:
+//   - size: 新的背包大小
+//
+// 返回: 是否成功扩展
 func (inv *Inventory) Expand(size int) bool {
 	if size <= inv.size {
 		return false
@@ -204,44 +240,42 @@ func (inv *Inventory) Expand(size int) bool {
 }
 
 // MoveItem 移动物品
+// 参数:
+//   - fromSlot: 源槽位
+//   - toSlot: 目标槽位
+//   - count: 移动数量
+//
+// 返回: 是否成功移动
 func (inv *Inventory) MoveItem(fromSlot int, toSlot int, count int) bool {
-	// 检查源槽位是否有物品
 	fromItemInterface, exists := inv.items.Load(fromSlot)
 	if !exists {
 		return false
 	}
 	fromItem := fromItemInterface.(*Item)
 
-	// 检查数量是否合法
 	if count <= 0 || count > int(fromItem.count.Load()) {
 		return false
 	}
 
-	// 检查目标槽位
 	toItemInterface, exists := inv.items.Load(toSlot)
 	if exists {
 		toItem := toItemInterface.(*Item)
-		// 检查是否可以堆叠
 		if toItem.itemId != fromItem.itemId || toItem.bind != fromItem.bind {
 			return false
 		}
 
-		// 检查堆叠空间
 		availableSpace := toItem.maxStack - int(toItem.count.Load())
 		if availableSpace < count {
 			return false
 		}
 
-		// 堆叠物品
 		toItem.count.Add(int32(count))
 
-		// 更新源槽位
 		fromItem.count.Add(-int32(count))
 		if fromItem.count.Load() <= 0 {
 			inv.items.Delete(fromSlot)
 		}
 	} else {
-		// 创建新物品
 		newProperties := zMap.NewMap()
 		fromItem.properties.Range(func(key, value interface{}) bool {
 			newProperties.Store(key, value)
@@ -259,10 +293,8 @@ func (inv *Inventory) MoveItem(fromSlot int, toSlot int, count int) bool {
 		}
 		newItem.count.Store(int32(count))
 
-		// 放置到目标槽位
 		inv.items.Store(toSlot, newItem)
 
-		// 更新源槽位
 		fromItem.count.Add(-int32(count))
 		if fromItem.count.Load() <= 0 {
 			inv.items.Delete(fromSlot)
@@ -273,11 +305,14 @@ func (inv *Inventory) MoveItem(fromSlot int, toSlot int, count int) bool {
 }
 
 // UseItem 使用物品
+// 参数:
+//   - slot: 槽位
+//   - playerLevel: 玩家等级（用于检查等级要求）
+//
+// 返回: 是否成功使用
 func (inv *Inventory) UseItem(slot int, playerLevel int) bool {
-	// 检查槽位是否有物品
 	itemInterface, exists := inv.items.Load(slot)
 	if !exists {
-		// 发布物品使用失败事件
 		eventData := &event.PlayerUseItemEventData{
 			PlayerID: inv.playerId,
 			ItemID:   0,
@@ -289,9 +324,7 @@ func (inv *Inventory) UseItem(slot int, playerLevel int) bool {
 	}
 	item := itemInterface.(*Item)
 
-	// 检查等级要求
 	if playerLevel < item.levelReq {
-		// 发布物品使用失败事件
 		eventData := &event.PlayerUseItemEventData{
 			PlayerID: inv.playerId,
 			ItemID:   item.itemId,
@@ -302,15 +335,12 @@ func (inv *Inventory) UseItem(slot int, playerLevel int) bool {
 		return false
 	}
 
-	// TODO: 实现物品使用逻辑
 	zLog.Debug("Using item", zap.Int64("itemId", item.itemId), zap.String("itemName", item.itemName), zap.Int64("playerId", inv.playerId))
 
-	// 减少物品数量
 	if item.count.Add(-1) <= 0 {
 		inv.items.Delete(slot)
 	}
 
-	// 发布物品使用成功事件
 	eventData := &event.PlayerUseItemEventData{
 		PlayerID: inv.playerId,
 		ItemID:   item.itemId,
@@ -323,25 +353,26 @@ func (inv *Inventory) UseItem(slot int, playerLevel int) bool {
 }
 
 // Sort 整理背包
+// 重新排列物品顺序
 func (inv *Inventory) Sort() {
-	// 收集所有物品
 	var items []*Item
 	inv.items.Range(func(key, value interface{}) bool {
 		items = append(items, value.(*Item))
 		return true
 	})
 
-	// 清空背包
 	inv.items.Clear()
 
-	// 重新排列物品（按物品ID和绑定状态）
-	// TODO: 实现更复杂的排序逻辑
 	for i, item := range items {
 		inv.items.Store(i+1, item)
 	}
 }
 
 // GetItemCount 获取物品数量
+// 参数:
+//   - itemId: 物品ID
+//
+// 返回: 该物品的总数量
 func (inv *Inventory) GetItemCount(itemId int64) int {
 	count := 0
 	inv.items.Range(func(key, value interface{}) bool {
@@ -355,8 +386,12 @@ func (inv *Inventory) GetItemCount(itemId int64) int {
 }
 
 // HasSpace 检查背包是否有空间
+// 参数:
+//   - count: 需要的数量
+//   - maxStack: 物品最大堆叠数
+//
+// 返回: 是否有足够空间
 func (inv *Inventory) HasSpace(count int, maxStack int) bool {
-	// 计算可用空间
 	emptySlots := 0
 	availableStackSpace := 0
 
@@ -368,19 +403,15 @@ func (inv *Inventory) HasSpace(count int, maxStack int) bool {
 		return true
 	})
 
-	// 计算空槽位数量
 	for slot := 1; slot <= inv.size; slot++ {
 		if _, exists := inv.items.Load(slot); !exists {
 			emptySlots++
 		}
 	}
 
-	// 检查是否有足够空间
 	if maxStack == 1 {
-		// 不可堆叠物品
 		return emptySlots >= count
 	} else {
-		// 可堆叠物品
 		if availableStackSpace >= count {
 			return true
 		}

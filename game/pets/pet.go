@@ -1,7 +1,8 @@
 package pet
 
 import (
-	"github.com/pzqf/zGameServer/game/common"
+	"github.com/pzqf/zGameServer/common"
+	gamecommon "github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/object"
 	"github.com/pzqf/zGameServer/game/object/component"
 )
@@ -183,8 +184,8 @@ func NewPet(id common.ObjectIdType, name string) *Pet {
 }
 
 // GetType 获取宠物类型
-func (p *Pet) GetType() int {
-	return int(common.GameObjectTypePet)
+func (p *Pet) GetType() gamecommon.GameObjectType {
+	return gamecommon.GameObjectTypePet
 }
 
 // GetPetGrowth 获取宠物成长系统

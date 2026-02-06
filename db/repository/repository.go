@@ -33,35 +33,168 @@ type AccountRepository interface {
 	UpdateLastLoginAt(accountID int64, lastLoginAt string) (bool, error)
 }
 
-// CharacterRepository 角色数据仓库接口
-type CharacterRepository interface {
-	// GetByIDAsync 根据ID异步获取角色
-	GetByIDAsync(characterID int64, callback func(*models.Character, error))
-	// GetByAccountIDAsync 根据账号ID异步获取角色列表
-	GetByAccountIDAsync(accountID int64, callback func([]*models.Character, error))
-	// CreateAsync 异步创建角色
-	CreateAsync(character *models.Character, callback func(int64, error))
-	// UpdateAsync 异步更新角色
-	UpdateAsync(character *models.Character, callback func(bool, error))
-	// DeleteAsync 异步删除角色
-	DeleteAsync(characterID int64, callback func(bool, error))
+type PlayerRepository interface {
+	GetByIDAsync(playerID int64, callback func(*models.Player, error))
+	GetByAccountIDAsync(accountID int64, callback func([]*models.Player, error))
+	CreateAsync(player *models.Player, callback func(int64, error))
+	UpdateAsync(player *models.Player, callback func(bool, error))
+	DeleteAsync(playerID int64, callback func(bool, error))
 
-	// GetByID 根据ID获取角色
-	GetByID(characterID int64) (*models.Character, error)
-	// GetByAccountID 根据账号ID获取角色列表
-	GetByAccountID(accountID int64) ([]*models.Character, error)
-	// Create 创建角色
-	Create(character *models.Character) (int64, error)
-	// Update 更新角色
-	Update(character *models.Character) (bool, error)
-	// Delete 删除角色
-	Delete(characterID int64) (bool, error)
+	GetByID(playerID int64) (*models.Player, error)
+	GetByAccountID(accountID int64) ([]*models.Player, error)
+	Create(player *models.Player) (int64, error)
+	Update(player *models.Player) (bool, error)
+	Delete(playerID int64) (bool, error)
 }
 
-// LoginLogRepository 登录日志数据仓库接口
+type PlayerItemRepository interface {
+	GetByPlayerIDAsync(playerID int64, callback func([]*models.PlayerItem, error))
+	CreateAsync(item *models.PlayerItem, callback func(int64, error))
+	UpdateAsync(item *models.PlayerItem, callback func(bool, error))
+	DeleteAsync(itemID int64, callback func(bool, error))
+
+	GetByPlayerID(playerID int64) ([]*models.PlayerItem, error)
+	Create(item *models.PlayerItem) (int64, error)
+	Update(item *models.PlayerItem) (bool, error)
+	Delete(itemID int64) (bool, error)
+}
+
+type PlayerSkillRepository interface {
+	GetByPlayerIDAsync(playerID int64, callback func([]*models.PlayerSkill, error))
+	CreateAsync(skill *models.PlayerSkill, callback func(int64, error))
+	UpdateAsync(skill *models.PlayerSkill, callback func(bool, error))
+	DeleteAsync(id int64, callback func(bool, error))
+
+	GetByPlayerID(playerID int64) ([]*models.PlayerSkill, error)
+	Create(skill *models.PlayerSkill) (int64, error)
+	Update(skill *models.PlayerSkill) (bool, error)
+	Delete(id int64) (bool, error)
+}
+
+type PlayerMailRepository interface {
+	GetByPlayerIDAsync(playerID int64, callback func([]*models.PlayerMail, error))
+	CreateAsync(mail *models.PlayerMail, callback func(int64, error))
+	UpdateAsync(mail *models.PlayerMail, callback func(bool, error))
+	DeleteAsync(mailID int64, callback func(bool, error))
+
+	GetByPlayerID(playerID int64) ([]*models.PlayerMail, error)
+	Create(mail *models.PlayerMail) (int64, error)
+	Update(mail *models.PlayerMail) (bool, error)
+	Delete(mailID int64) (bool, error)
+}
+
+type PlayerQuestRepository interface {
+	GetByPlayerIDAsync(playerID int64, callback func([]*models.PlayerQuest, error))
+	CreateAsync(quest *models.PlayerQuest, callback func(int64, error))
+	UpdateAsync(quest *models.PlayerQuest, callback func(bool, error))
+	DeleteAsync(id int64, callback func(bool, error))
+
+	GetByPlayerID(playerID int64) ([]*models.PlayerQuest, error)
+	Create(quest *models.PlayerQuest) (int64, error)
+	Update(quest *models.PlayerQuest) (bool, error)
+	Delete(id int64) (bool, error)
+}
+
+type PlayerPetRepository interface {
+	GetByPlayerIDAsync(playerID int64, callback func([]*models.PlayerPet, error))
+	CreateAsync(pet *models.PlayerPet, callback func(int64, error))
+	UpdateAsync(pet *models.PlayerPet, callback func(bool, error))
+	DeleteAsync(petID int64, callback func(bool, error))
+
+	GetByPlayerID(playerID int64) ([]*models.PlayerPet, error)
+	Create(pet *models.PlayerPet) (int64, error)
+	Update(pet *models.PlayerPet) (bool, error)
+	Delete(petID int64) (bool, error)
+}
+
+type PlayerBuffRepository interface {
+	GetByPlayerIDAsync(playerID int64, callback func([]*models.PlayerBuff, error))
+	CreateAsync(buff *models.PlayerBuff, callback func(int64, error))
+	UpdateAsync(buff *models.PlayerBuff, callback func(bool, error))
+	DeleteAsync(id int64, callback func(bool, error))
+
+	GetByPlayerID(playerID int64) ([]*models.PlayerBuff, error)
+	Create(buff *models.PlayerBuff) (int64, error)
+	Update(buff *models.PlayerBuff) (bool, error)
+	Delete(id int64) (bool, error)
+}
+
+type GuildRepository interface {
+	GetByIDAsync(guildID int64, callback func(*models.Guild, error))
+	GetByNameAsync(name string, callback func(*models.Guild, error))
+	CreateAsync(guild *models.Guild, callback func(int64, error))
+	UpdateAsync(guild *models.Guild, callback func(bool, error))
+	DeleteAsync(guildID int64, callback func(bool, error))
+
+	GetByID(guildID int64) (*models.Guild, error)
+	GetByName(name string) (*models.Guild, error)
+	Create(guild *models.Guild) (int64, error)
+	Update(guild *models.Guild) (bool, error)
+	Delete(guildID int64) (bool, error)
+}
+
+type GuildMemberRepository interface {
+	GetByGuildIDAsync(guildID int64, callback func([]*models.GuildMember, error))
+	CreateAsync(member *models.GuildMember, callback func(int64, error))
+	UpdateAsync(member *models.GuildMember, callback func(bool, error))
+	DeleteAsync(id int64, callback func(bool, error))
+
+	GetByGuildID(guildID int64) ([]*models.GuildMember, error)
+	Create(member *models.GuildMember) (int64, error)
+	Update(member *models.GuildMember) (bool, error)
+	Delete(id int64) (bool, error)
+}
+
+type AuctionRepository interface {
+	GetByIDAsync(auctionID int64, callback func(*models.Auction, error))
+	GetBySellerIDAsync(sellerID int64, callback func([]*models.Auction, error))
+	CreateAsync(auction *models.Auction, callback func(int64, error))
+	UpdateAsync(auction *models.Auction, callback func(bool, error))
+	DeleteAsync(auctionID int64, callback func(bool, error))
+
+	GetByID(auctionID int64) (*models.Auction, error)
+	GetBySellerID(sellerID int64) ([]*models.Auction, error)
+	Create(auction *models.Auction) (int64, error)
+	Update(auction *models.Auction) (bool, error)
+	Delete(auctionID int64) (bool, error)
+}
+
 type LoginLogRepository interface {
-	// CreateAsync 异步创建登录日志
 	CreateAsync(loginLog *models.LoginLog, callback func(int64, error))
-	// GetByAccountIDAsync 根据账号ID异步获取登录日志列表
-	GetByAccountIDAsync(accountID int64, limit int, callback func([]*models.LoginLog, error))
+	GetByPlayerIDAsync(playerID int64, limit int, callback func([]*models.LoginLog, error))
+	GetByOpTypeAsync(opType int32, limit int, callback func([]*models.LoginLog, error))
+
+	Create(loginLog *models.LoginLog) (int64, error)
+	GetByPlayerID(playerID int64, limit int) ([]*models.LoginLog, error)
+	GetByOpType(opType int32, limit int) ([]*models.LoginLog, error)
+}
+
+type MailLogRepository interface {
+	CreateAsync(mailLog *models.MailLog, callback func(int64, error))
+	GetByMailIDAsync(mailID int64, limit int, callback func([]*models.MailLog, error))
+	GetByPlayerIDAsync(playerID int64, limit int, callback func([]*models.MailLog, error))
+
+	Create(mailLog *models.MailLog) (int64, error)
+	GetByMailID(mailID int64, limit int) ([]*models.MailLog, error)
+	GetByPlayerID(playerID int64, limit int) ([]*models.MailLog, error)
+}
+
+type QuestLogRepository interface {
+	CreateAsync(questLog *models.QuestLog, callback func(int64, error))
+	GetByPlayerIDAsync(playerID int64, limit int, callback func([]*models.QuestLog, error))
+	GetByQuestIDAsync(questID int32, limit int, callback func([]*models.QuestLog, error))
+
+	Create(questLog *models.QuestLog) (int64, error)
+	GetByPlayerID(playerID int64, limit int) ([]*models.QuestLog, error)
+	GetByQuestID(questID int32, limit int) ([]*models.QuestLog, error)
+}
+
+type AuctionLogRepository interface {
+	CreateAsync(auctionLog *models.AuctionLog, callback func(int64, error))
+	GetByAuctionIDAsync(auctionID int64, limit int, callback func([]*models.AuctionLog, error))
+	GetByPlayerIDAsync(playerID int64, limit int, callback func([]*models.AuctionLog, error))
+
+	Create(auctionLog *models.AuctionLog) (int64, error)
+	GetByAuctionID(auctionID int64, limit int) ([]*models.AuctionLog, error)
+	GetByPlayerID(playerID int64, limit int) ([]*models.AuctionLog, error)
 }

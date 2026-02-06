@@ -8,11 +8,11 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zSignal"
+	"github.com/pzqf/zGameServer/common"
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/config/tables"
 	"github.com/pzqf/zGameServer/db"
 	"github.com/pzqf/zGameServer/game/auction"
-	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/game/guild"
 	"github.com/pzqf/zGameServer/game/maps"
 	"github.com/pzqf/zGameServer/game/player"
@@ -70,12 +70,14 @@ func main() {
 		zLog.Fatal("Failed to setup services", zap.Error(err))
 	}
 
-	defer db.GetDBManager().Close()
+	defer db.GetMgr().Close()
 
 	metrics.RegisterBasicMetrics()
 
 	gameServer := gameserver.NewGameServer()
-	setupServices(gameServer)
+	if err := setupServices(gameServer); err != nil {
+		zLog.Fatal("Failed to initialize logger", zap.Error(err))
+	}
 
 	ctx, cancelPprof := context.WithCancel(context.Background())
 	setupPprof(ctx)
@@ -164,7 +166,5 @@ func setupServices(gameServer *gameserver.GameServer) error {
 
 	handler.Init(gameServer.GetPacketRouter(), playerService, guildService, auctionService, mapService)
 
-	gameServer.InitServices()
-
-	return nil
+	return gameServer.InitServices()
 }

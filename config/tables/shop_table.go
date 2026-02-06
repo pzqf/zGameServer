@@ -1,15 +1,12 @@
 package tables
 
 import (
-	"sync"
-
 	"github.com/pzqf/zGameServer/config/models"
 )
 
 // ShopTableLoader 商店表加载器
 type ShopTableLoader struct {
-	mu    sync.RWMutex
-	shops map[int32]*models.Shop
+	shops map[int32]*models.Shop // 商店配置映射
 }
 
 // NewShopTableLoader 创建商店表加载器
@@ -28,7 +25,6 @@ func (stl *ShopTableLoader) Load(dir string) error {
 		TableName:  "shops",
 	}
 
-	// 使用临时map批量加载数据，减少锁竞争
 	tempShops := make(map[int32]*models.Shop)
 
 	err := ReadExcelFile(config, dir, func(row []string) error {
@@ -47,11 +43,8 @@ func (stl *ShopTableLoader) Load(dir string) error {
 		return nil
 	})
 
-	// 批量写入到目标map，只需加一次锁
 	if err == nil {
-		stl.mu.Lock()
 		stl.shops = tempShops
-		stl.mu.Unlock()
 	}
 
 	return err
@@ -64,20 +57,15 @@ func (stl *ShopTableLoader) GetTableName() string {
 
 // GetShop 根据ID获取商店配置
 func (stl *ShopTableLoader) GetShop(shopID int32) (*models.Shop, bool) {
-	stl.mu.RLock()
 	shop, ok := stl.shops[shopID]
-	stl.mu.RUnlock()
 	return shop, ok
 }
 
 // GetAllShops 获取所有商店配置
 func (stl *ShopTableLoader) GetAllShops() map[int32]*models.Shop {
-	stl.mu.RLock()
-	// 创建一个副本，避免外部修改内部数据
 	shopsCopy := make(map[int32]*models.Shop, len(stl.shops))
 	for id, shop := range stl.shops {
 		shopsCopy[id] = shop
 	}
-	stl.mu.RUnlock()
 	return shopsCopy
 }

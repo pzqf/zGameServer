@@ -8,8 +8,8 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zService"
+	"github.com/pzqf/zGameServer/common"
 	"github.com/pzqf/zGameServer/config"
-	"github.com/pzqf/zGameServer/game/common"
 	"github.com/pzqf/zGameServer/metrics"
 	"go.uber.org/zap"
 )
