@@ -147,6 +147,9 @@ func (h *PlayerHandler) handleAccountCreate(session *zNet.TcpServerSession, pack
 		return session.Send(1001, respData)
 	}
 
+	h.accountSession[req.Account] = session.GetSid()
+	h.sessionAccount[session.GetSid()] = req.Account
+
 	resp := protocol.AccountCreateResponse{
 		Success:  true,
 		ErrorMsg: "",
@@ -156,7 +159,7 @@ func (h *PlayerHandler) handleAccountCreate(session *zNet.TcpServerSession, pack
 }
 
 func (h *PlayerHandler) handleAccountLogin(session *zNet.TcpServerSession, packet *zNet.NetPacket) error {
-	zLog.Debug("Received account login request", zap.Int64("sessionId", int64(session.GetSid())))
+	zLog.Info("Received account login request", zap.Int64("sessionId", int64(session.GetSid())))
 
 	var req protocol.AccountLoginRequest
 	if err := proto.Unmarshal(packet.Data, &req); err != nil {
@@ -184,7 +187,16 @@ func (h *PlayerHandler) handleAccountLogin(session *zNet.TcpServerSession, packe
 		return session.Send(1002, respData)
 	}
 
-	if account == nil || account.Password != req.Password {
+	if account == nil {
+		resp := protocol.AccountLoginResponse{
+			Success:  false,
+			ErrorMsg: "账号不存在，请创建账号",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1002, respData)
+	}
+
+	if account.Password != req.Password {
 		resp := protocol.AccountLoginResponse{
 			Success:  false,
 			ErrorMsg: "账号或密码错误",
@@ -202,14 +214,32 @@ func (h *PlayerHandler) handleAccountLogin(session *zNet.TcpServerSession, packe
 	h.accountSession[req.Account] = session.GetSid()
 	h.sessionAccount[session.GetSid()] = req.Account
 
-	//todo 查询玩家列表
+	players, err := db.GetMgr().PlayerRepository.GetByAccountID(account.AccountID)
+	if err != nil {
+		zLog.Error("Failed to get players", zap.Error(err))
+		players = nil
+	}
+
+	zLog.Info("Players found for account", zap.String("account", req.Account), zap.Int("playerCount", len(players)))
+
+	var playerInfos []*protocol.PlayerInfo
+	for _, p := range players {
+		playerInfos = append(playerInfos, &protocol.PlayerInfo{
+			PlayerId: p.PlayerID,
+			Name:     p.PlayerName,
+			Level:    int32(p.Level),
+			Sex:      int32(p.Sex),
+			Age:      int32(p.Age),
+		})
+	}
 
 	resp := protocol.AccountLoginResponse{
 		Success:  true,
 		ErrorMsg: "",
-		Players:  []*protocol.PlayerInfo{},
+		Players:  playerInfos,
 	}
 	respData, _ := proto.Marshal(&resp)
+	zLog.Info("Sending account login response", zap.Int("playerCount", len(playerInfos)), zap.Int("dataSize", len(respData)))
 	return session.Send(1002, respData)
 }
 
@@ -294,6 +324,20 @@ func (h *PlayerHandler) handlePlayerCreate(session *zNet.TcpServerSession, packe
 		respData, _ := proto.Marshal(&resp)
 		return session.Send(1003, respData)
 	}
+
+	_, err = h.playerService.CreatePlayerActor(session, common.PlayerIdType(newPlayer.PlayerID), newPlayer.PlayerName)
+	if err != nil {
+		zLog.Error("Failed to create player actor", zap.Error(err))
+		resp := protocol.PlayerCreateResponse{
+			Success:  false,
+			ErrorMsg: "服务器错误",
+		}
+		respData, _ := proto.Marshal(&resp)
+		return session.Send(1003, respData)
+	}
+
+	h.playerSession[common.PlayerIdType(newPlayer.PlayerID)] = session.GetSid()
+	h.sessionPlayer[session.GetSid()] = common.PlayerIdType(newPlayer.PlayerID)
 
 	resp := protocol.PlayerCreateResponse{
 		Success:  true,

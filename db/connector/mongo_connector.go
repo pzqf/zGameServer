@@ -1,11 +1,13 @@
 package connector
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zGameServer/config"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -79,6 +81,39 @@ func (c *MongoConnector) Init(dbConfig config.DBConfig) error {
 		zap.Int("port", dbConfig.Port),
 		zap.String("dbname", dbConfig.DBName),
 	)
+
+	if err := c.ensureIndexes(); err != nil {
+		zLog.Warn("Failed to ensure MongoDB indexes", zap.Error(err))
+	}
+
+	return nil
+}
+
+func (c *MongoConnector) ensureIndexes() error {
+	ctx := context.Background()
+	dbName := c.mongoDB.Name()
+
+	if dbName == "account" || dbName == "accounts" {
+		accountsCollection := c.mongoDB.Collection("accounts")
+		_, err := accountsCollection.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys:    bson.D{{Key: "account_name", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create unique index on accounts: %w", err)
+		}
+		zLog.Info("MongoDB account indexes ensured")
+	} else if dbName == "game" || dbName == "game_1" {
+		playersCollection := c.mongoDB.Collection("players")
+		_, err := playersCollection.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys:    bson.D{{Key: "player_name", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create unique index on players: %w", err)
+		}
+		zLog.Info("MongoDB game indexes ensured")
+	}
 
 	return nil
 }

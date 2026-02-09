@@ -84,12 +84,16 @@ func (pp *ProtobufProtocol) Encode(protoId int32, version int32, data interface{
 	}
 
 	// 创建NetPacket
+	var isCompressedInt int32
+	if isCompressed {
+		isCompressedInt = 1
+	}
 	packet := &zNet.NetPacket{
 		ProtoId:      protoId,
 		Version:      version,
 		DataSize:     int32(len(compressedData)),
 		Data:         compressedData,
-		IsCompressed: isCompressed,
+		IsCompressed: isCompressedInt,
 	}
 
 	// 记录编码延迟和发送的数据包大小
@@ -111,7 +115,7 @@ func (pp *ProtobufProtocol) Decode(packet *zNet.NetPacket) (interface{}, error) 
 	data := packet.Data
 
 	// 如果数据被压缩，先解压
-	if packet.IsCompressed {
+	if packet.IsCompressed != 0 {
 		decompressed, err := Decompress(data)
 		if err == nil {
 			data = decompressed

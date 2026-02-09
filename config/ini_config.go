@@ -435,9 +435,9 @@ func (c *Config) Validate() error {
 		if dbCfg.Port <= 0 {
 			return fmt.Errorf("database %s port is required", name)
 		}
-		if dbCfg.User == "" {
-			return fmt.Errorf("database %s user is required", name)
-		}
+		//if dbCfg.User == "" {
+		//	return fmt.Errorf("database %s user is required", name)
+		//}
 		if dbCfg.DBName == "" {
 			return fmt.Errorf("database %s dbname is required", name)
 		}

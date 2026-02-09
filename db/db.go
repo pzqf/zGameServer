@@ -7,6 +7,7 @@ import (
 	"github.com/pzqf/zGameServer/config"
 	"github.com/pzqf/zGameServer/db/connector"
 	"github.com/pzqf/zGameServer/db/di"
+	"github.com/pzqf/zGameServer/db/models"
 	"github.com/pzqf/zGameServer/db/repository"
 )
 
@@ -108,4 +109,8 @@ func (manager *DBManager) GetAllConnectors() map[string]connector.DBConnector {
 
 func (manager *DBManager) GetContainer() zInject.Container {
 	return manager.container
+}
+
+func ValidateModelTags() error {
+	return models.ValidateModelTags()
 }

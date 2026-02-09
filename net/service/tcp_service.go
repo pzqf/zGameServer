@@ -101,28 +101,30 @@ func (ts *TcpService) startMetricsPrinter() {
 		zLog.Error("Metrics printer panicked", zap.Any("panic", recover))
 	})
 
-	ticker := time.NewTicker(30 * time.Second) // 每30秒打印一次
-	defer ticker.Stop()
+	/*
+		ticker := time.NewTicker(30 * time.Second) // 每30秒打印一次
+		defer ticker.Stop()
 
-	for range ticker.C {
-		defer util.Recover(func(recover interface{}, stack string) {
-			zLog.Error("Metrics printing panicked", zap.Any("panic", recover))
-		})
+		for range ticker.C {
+			defer util.Recover(func(recover interface{}, stack string) {
+				zLog.Error("Metrics printing panicked", zap.Any("panic", recover))
+			})
 
-		stats := ts.metrics.GetStats()
-		zLog.Info("Network metrics",
-			zap.Int("active_connections", stats["active_connections"].(int)),
-			zap.Float64("avg_latency_ms", stats["avg_latency_ms"].(float64)),
-			zap.Float64("throughput_sent_bps", stats["throughput_sent_bps"].(float64)),
-			zap.Float64("throughput_received_bps", stats["throughput_received_bps"].(float64)),
-			zap.Int64("total_packets_sent", stats["total_packets_sent"].(int64)),
-			zap.Int64("total_packets_received", stats["total_packets_received"].(int64)),
-			zap.Int64("dropped_packets", stats["dropped_packets"].(int64)),
-		)
+			stats := ts.metrics.GetStats()
+			zLog.Info("Network metrics",
+				zap.Int("active_connections", stats["active_connections"].(int)),
+				zap.Float64("avg_latency_ms", stats["avg_latency_ms"].(float64)),
+				zap.Float64("throughput_sent_bps", stats["throughput_sent_bps"].(float64)),
+				zap.Float64("throughput_received_bps", stats["throughput_received_bps"].(float64)),
+				zap.Int64("total_packets_sent", stats["total_packets_sent"].(int64)),
+				zap.Int64("total_packets_received", stats["total_packets_received"].(int64)),
+				zap.Int64("dropped_packets", stats["dropped_packets"].(int64)),
+			)
 
-		// 重置统计信息
-		ts.metrics.Reset()
-	}
+			// 重置统计信息
+			ts.metrics.Reset()
+		}
+	*/
 }
 
 func (ts *TcpService) dispatchPacket(session zNet.Session, packet *zNet.NetPacket) error {

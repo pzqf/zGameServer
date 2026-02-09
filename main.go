@@ -37,6 +37,7 @@ func main() {
 	})
 
 	if err := config.InitConfig("config.ini"); err != nil {
+		fmt.Println("Failed to initialize config:", err)
 		return
 	}
 
@@ -65,6 +66,11 @@ func main() {
 	}
 
 	zLog.Info("Starting MMO Game Server...")
+
+	if err := db.ValidateModelTags(); err != nil {
+		zLog.Fatal("Model tag validation failed", zap.Error(err))
+	}
+	zLog.Info("Model tags validated successfully")
 
 	if err := db.InitDBManager(); err != nil {
 		zLog.Fatal("Failed to setup services", zap.Error(err))
